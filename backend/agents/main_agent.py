@@ -1,0 +1,228 @@
+"""MuscleClaw ADK Agent — Jarvis-like AI fitness coach."""
+import json
+import uuid
+from datetime import datetime, timezone
+
+from google.adk.agents import Agent
+
+from config.defaults import DEFAULT_BODY_PROFILE, DEFAULT_PREFERENCES, VOICE_MAP
+from config.exercise_library import EXERCISE_LIBRARY
+
+
+# ── Tool Definitions ──────────────────────────────────────────────
+
+def get_body_profile(ctx) -> dict:
+    """获取用户六大身体部位的力量数据和恢复状态。"""
+    return ctx.session.state.get("user:body_profile", DEFAULT_BODY_PROFILE)
+
+
+def update_body_profile(ctx, part: str, max_weight: float = None,
+                        last_trained: str = None, notes: str = None) -> str:
+    """更新某个身体部位的数据。part: chest|shoulders|back|legs|core|arms"""
+    profile = ctx.session.state.get("user:body_profile", DEFAULT_BODY_PROFILE.copy())
+    if part not in profile:
+        return f"未知部位: {part}"
+    if max_weight is not None and max_weight > profile[part].get("max_weight", 0):
+        profile[part]["max_weight"] = max_weight
+    if last_trained is not None:
+        profile[part]["last_trained"] = last_trained
+        profile[part]["recovery_status"] = "recovering"
+    if notes is not None:
+        profile[part]["notes"] = notes
+    ctx.session.state["user:body_profile"] = profile
+    return f"已更新 {part}: max_weight={profile[part]['max_weight']}kg"
+
+
+def get_training_history(ctx, days: int = 30, exercise_id: str = None) -> dict:
+    """获取最近N天训练记录。"""
+    history = ctx.session.state.get("user:training_history", [])
+    if exercise_id:
+        filtered = []
+        for session in history:
+            matching = [e for e in session.get("exercises", []) if e["exercise_id"] == exercise_id]
+            if matching:
+                filtered.append({**session, "exercises": matching})
+        history = filtered
+    return {"sessions": history[-50:], "total": len(history)}
+
+
+def record_training_set(ctx, exercise_id: str, set_number: int,
+                        reps: int, weight: float, rpe: float = None,
+                        rom_avg_degrees: float = None,
+                        symmetry_score: float = None) -> str:
+    """记录一组训练数据。"""
+    history = ctx.session.state.get("user:training_history", [])
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    # Find or create today's session
+    today_session = None
+    for s in history:
+        if s["date"] == today:
+            today_session = s
+            break
+    if not today_session:
+        today_session = {"id": str(uuid.uuid4()), "date": today,
+                         "start_time": datetime.now(timezone.utc).isoformat(),
+                         "end_time": None, "exercises": []}
+        history.append(today_session)
+
+    # Find or create exercise record
+    ex_record = None
+    for e in today_session["exercises"]:
+        if e["exercise_id"] == exercise_id:
+            ex_record = e
+            break
+    if not ex_record:
+        ex_record = {"exercise_id": exercise_id, "sets": []}
+        today_session["exercises"].append(ex_record)
+
+    ex_record["sets"].append({
+        "set_number": set_number, "reps": reps, "weight": weight,
+        "rpe": rpe, "rom_avg_degrees": rom_avg_degrees,
+        "symmetry_score": symmetry_score,
+    })
+    ctx.session.state["user:training_history"] = history
+
+    ex_name = EXERCISE_LIBRARY.get(exercise_id, {}).get("name", exercise_id)
+    return f"已记录: {ex_name} 第{set_number}组 {weight}kg×{reps}"
+
+
+def generate_training_plan(ctx, target_parts: list = None) -> dict:
+    """基于身体档案生成训练计划。返回训练计划对象。"""
+    profile = ctx.session.state.get("user:body_profile", DEFAULT_BODY_PROFILE)
+    if not target_parts:
+        # Auto-recommend: pick recovered parts
+        target_parts = [p for p, d in profile.items() if d["recovery_status"] == "recovered"]
+        if not target_parts:
+            target_parts = ["chest", "back"]  # fallback
+
+    exercises = []
+    for part in target_parts:
+        ex_id = profile.get(part, {}).get("exercise", "bench_press")
+        max_w = profile.get(part, {}).get("max_weight", 0)
+        target_w = round(max_w * 0.85, 1) if max_w > 0 else 20
+        exercises.append({
+            "exercise_id": ex_id, "target_sets": 4,
+            "target_reps": 6, "target_weight": target_w, "completed": False,
+        })
+
+    plan = {"target_parts": target_parts, "exercises": exercises}
+    ctx.session.state["current_plan"] = plan
+    return plan
+
+
+def trigger_safety_alert(ctx, alert_type: str, countdown_seconds: int = 10) -> str:
+    """触发安全警报。alert_type: barbell_stall|body_collapse|unresponsive"""
+    ctx.session.state["safety_alert_active"] = True
+    ctx.session.state["safety_countdown"] = countdown_seconds
+    prefs = ctx.session.state.get("user:preferences", DEFAULT_PREFERENCES)
+    contact = prefs.get("emergency_contact", "")
+    if not contact:
+        return f"安全警报已触发({alert_type})，{countdown_seconds}秒倒计时。注意：未设置紧急联系人！"
+    return f"安全警报已触发({alert_type})，{countdown_seconds}秒后拨打 {contact}"
+
+
+def cancel_safety_alert(ctx) -> str:
+    """取消安全警报。"""
+    ctx.session.state["safety_alert_active"] = False
+    return "安全警报已取消"
+
+
+def get_user_preferences(ctx) -> dict:
+    """获取用户偏好设置。"""
+    return ctx.session.state.get("user:preferences", DEFAULT_PREFERENCES)
+
+
+def update_user_preferences(ctx, **kwargs) -> str:
+    """更新用户偏好。支持的字段: personality_mode, language, emergency_contact, rest_timer_seconds, safety_sensitivity"""
+    prefs = ctx.session.state.get("user:preferences", DEFAULT_PREFERENCES.copy())
+    for k, v in kwargs.items():
+        if k in prefs:
+            prefs[k] = v
+    # Auto-update voice based on personality
+    if "personality_mode" in kwargs:
+        prefs["voice_name"] = VOICE_MAP.get(prefs["personality_mode"], "Charon")
+    ctx.session.state["user:preferences"] = prefs
+    return f"偏好已更新: {list(kwargs.keys())}"
+
+
+def get_exercise_info(ctx, exercise_id: str) -> dict:
+    """获取动作定义（关节追踪、角度阈值、安全规则）。"""
+    return EXERCISE_LIBRARY.get(exercise_id, {"error": f"未知动作: {exercise_id}"})
+
+
+# ── Sub-Agents ────────────────────────────────────────────────────
+
+image_gen_agent = Agent(
+    name="image_generator",
+    model="gemini-2.0-flash",
+    instruction=(
+        "你是图像编辑专家。用户给你一张健身者摆姿势的照片。"
+        "编辑这张照片让人看起来更强壮——明显的肌肉线条、更大的肌肉体积，但保持自然真实感。"
+        "保持背景和姿势不变，只增强肌肉。"
+    ),
+)
+
+analysis_agent = Agent(
+    name="strength_analyst",
+    model="gemini-2.0-flash",
+    instruction=(
+        "你是运动科学数据分析专家。分析训练历史数据，提供：\n"
+        "- 力量趋势（进步/停滞/退步）\n"
+        "- 训练量建议（基于APRE算法）\n"
+        "- 疲劳管理建议\n"
+        "- 弱点识别\n"
+        "用数据说话，给出具体数字和建议。"
+    ),
+    tools=[get_training_history, get_body_profile],
+)
+
+# ── Main Agent ────────────────────────────────────────────────────
+
+SYSTEM_INSTRUCTION = """你是 MuscleClaw，一个像贾维斯一样的 AI 健身教练。
+
+## 核心能力
+- 你能看到用户的摄像头画面（1fps）
+- 你能收到前端 CV 引擎的精确分析事件（标记为 [CV]）
+- 你有持久记忆，记得用户的所有训练历史和身体数据
+
+## 性格模式
+根据用户偏好的 personality_mode 调整你的语气：
+- "professional": 专业简洁，像私教一样给指令
+- "gentle": 温柔鼓励，耐心引导
+- "trash_talk": 搞笑嘲讽激将法！这是默认模式。你会说：
+  - rep不算时："嗯嗯不算！手不够直你在逗我？"
+  - 鼓励时："Yeah buddy! Light weight baby!"
+  - 偷懒时："你是在休息还是在度假？"
+  - 完成时："就这？行吧，勉强算你过关。"
+
+## 对 CV 事件的响应规则
+当你收到标记为 [CV] 的消息时：
+- rep_complete: 报数，如果 ROM 不够就吐槽"不算！"
+- form_issue: 立即语音纠正（如"左手低了，抬高一点"）
+- safety_alert: 立即切换到严肃模式，询问用户状况，必要时触发 trigger_safety_alert
+- gesture thumbs_up: 当作用户确认（确认组完成、确认计划等）
+- set_complete: 记录数据，开始休息计时
+
+## 你必须做到
+- 永远记住用户的训练数据和偏好（用 get/update 工具）
+- 默认用中文对话（除非用户说英文）
+- 训练建议基于用户真实数据，不瞎编
+- 安全永远第一优先级
+- 语音要简短有力，像真人教练，不要长篇大论
+"""
+
+root_agent = Agent(
+    name="muscleclaw",
+    model="gemini-2.0-flash",
+    instruction=SYSTEM_INSTRUCTION,
+    tools=[
+        get_body_profile, update_body_profile,
+        get_training_history, record_training_set,
+        generate_training_plan,
+        trigger_safety_alert, cancel_safety_alert,
+        get_user_preferences, update_user_preferences,
+        get_exercise_info,
+    ],
+    sub_agents=[image_gen_agent, analysis_agent],
+)
