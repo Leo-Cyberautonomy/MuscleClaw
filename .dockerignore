@@ -1,0 +1,10 @@
+node_modules/
+__pycache__/
+.env
+*.pyc
+.git/
+.venv/
+sessions.db
+docs/
+frontend/dist/
+.adk/
