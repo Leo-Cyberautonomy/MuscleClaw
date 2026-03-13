@@ -2,6 +2,16 @@ import { useRef, useEffect } from 'react';
 import { adkClient } from '../ws/adkClient';
 import { AudioEngine } from '../audio/audioEngine';
 import { useAppStore } from '../stores/appStore';
+import { initMediaPipe, detectPose, detectHands } from '../cv/mediapipe';
+import { processFrame as processRep } from '../cv/repCounter';
+import { checkSafety } from '../cv/safetyMonitor';
+import { detectGesture } from '../cv/gestureDetector';
+import { drawSkeleton } from '../render/skeleton';
+import { drawAngle } from '../render/angles';
+import { POSE } from '../cv/types';
+import type { Landmark } from '../cv/types';
+import { TrainingHUD } from './TrainingHUD';
+import { RestTimer } from './RestTimer';
 
 const audioEngine = new AudioEngine();
 
@@ -10,10 +20,13 @@ export function CameraView() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mode = useAppStore((s) => s.mode);
   const connected = useAppStore((s) => s.connected);
+  const landmarksRef = useRef<Landmark[] | null>(null);
 
   useEffect(() => {
     let animId: number;
     let frameInterval: ReturnType<typeof setInterval>;
+    let mediaPipeReady = false;
+    let frameCount = 0;
 
     async function init() {
       // Camera
@@ -34,6 +47,12 @@ export function CameraView() {
         onAudio: (pcm) => audioEngine.playPCM(pcm),
       });
 
+      // Initialize MediaPipe (async, non-blocking)
+      initMediaPipe().then(() => {
+        mediaPipeReady = true;
+        console.log('[MediaPipe] Ready');
+      }).catch((err) => console.warn('[MediaPipe] Init failed:', err));
+
       // Send 1fps JPEG to Gemini
       frameInterval = setInterval(() => {
         if (!videoRef.current) return;
@@ -45,9 +64,77 @@ export function CameraView() {
         adkClient.sendVideoFrame(jpeg);
       }, 1000);
 
-      // Render loop (for Canvas overlay — populated later by MediaPipe)
+      // Main render + CV loop
       function renderLoop() {
-        // Canvas rendering will be added in Chunk 3
+        frameCount++;
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        if (!video || !canvas) {
+          animId = requestAnimationFrame(renderLoop);
+          return;
+        }
+
+        // Match canvas resolution to video display size
+        const rect = video.getBoundingClientRect();
+        if (canvas.width !== rect.width || canvas.height !== rect.height) {
+          canvas.width = rect.width;
+          canvas.height = rect.height;
+        }
+
+        const ctx = canvas.getContext('2d')!;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        if (mediaPipeReady && video.readyState >= 2) {
+          const timestamp = performance.now();
+
+          // Alternating frames: even → pose, odd → hands
+          if (frameCount % 2 === 0) {
+            const landmarks = detectPose(video, timestamp);
+            if (landmarks) {
+              landmarksRef.current = landmarks;
+
+              // Draw skeleton (mirrored to match video)
+              ctx.save();
+              ctx.translate(canvas.width, 0);
+              ctx.scale(-1, 1);
+              drawSkeleton(ctx, landmarks, canvas.width, canvas.height);
+
+              // Draw elbow angles
+              drawAngle(ctx, landmarks, POSE.LEFT_SHOULDER, POSE.LEFT_ELBOW, POSE.LEFT_WRIST, canvas.width, canvas.height);
+              drawAngle(ctx, landmarks, POSE.RIGHT_SHOULDER, POSE.RIGHT_ELBOW, POSE.RIGHT_WRIST, canvas.width, canvas.height);
+              ctx.restore();
+
+              // CV analytics
+              const currentMode = useAppStore.getState().mode;
+              if (currentMode === 'training') {
+                const exerciseId = useAppStore.getState().training.exerciseId || 'bench_press';
+                const repEvent = processRep(landmarks, exerciseId);
+                if (repEvent) {
+                  adkClient.sendCVEvent(repEvent);
+                  if (repEvent.type === 'rep_complete') {
+                    useAppStore.getState().updateTraining({ reps: repEvent.rep });
+                  }
+                }
+              }
+
+              // Safety check (always active)
+              const safetyEvent = checkSafety(landmarks, canvas.height);
+              if (safetyEvent) {
+                adkClient.sendCVEvent(safetyEvent);
+              }
+            }
+          } else {
+            // Hand detection for gestures
+            const hands = detectHands(video, timestamp);
+            if (hands && hands.length > 0) {
+              const gestureEvent = detectGesture(hands);
+              if (gestureEvent) {
+                adkClient.sendCVEvent(gestureEvent);
+              }
+            }
+          }
+        }
+
         animId = requestAnimationFrame(renderLoop);
       }
       renderLoop();
@@ -74,6 +161,8 @@ export function CameraView() {
         ref={canvasRef}
         style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
       />
+      <TrainingHUD />
+      <RestTimer />
       {/* Mode indicator */}
       <div style={{
         position: 'absolute', top: 16, left: 16,
