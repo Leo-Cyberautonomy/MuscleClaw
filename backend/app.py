@@ -65,16 +65,14 @@ async def get_exercises():
 async def websocket_endpoint(websocket: WebSocket, user_id: str):
     await websocket.accept()
 
-    # Get or create session
-    sessions = await session_service.list_sessions(
+    # Always create a fresh session per WebSocket connection.
+    # User-level data (body_profile, training_history, preferences) persists
+    # via Firestore user: prefix — not tied to individual sessions.
+    # Reusing old sessions causes "invalid argument" errors because
+    # stale event history gets replayed to the Live API.
+    session = await session_service.create_session(
         app_name="muscleclaw", user_id=user_id
     )
-    if sessions and sessions.sessions:
-        session = sessions.sessions[0]
-    else:
-        session = await session_service.create_session(
-            app_name="muscleclaw", user_id=user_id
-        )
 
     # Create live request queue for bidi-streaming
     live_queue = LiveRequestQueue()
