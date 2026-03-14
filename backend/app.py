@@ -196,12 +196,10 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                     ))
 
                 elif msg["type"] == "video_frame":
-                    # Video frame (base64 JPEG) → Gemini vision
-                    frame_bytes = base64.b64decode(msg["data"])
-                    live_queue.send_realtime(types.Blob(
-                        mime_type="image/jpeg",
-                        data=frame_bytes,
-                    ))
+                    # Video frames not supported by native-audio model.
+                    # Visual understanding relies on CV engine events instead.
+                    # Enable when using a model that supports video input.
+                    pass
 
     except WebSocketDisconnect:
         pass
