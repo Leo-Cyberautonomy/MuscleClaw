@@ -170,9 +170,9 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                         })
 
         except asyncio.CancelledError:
-            pass
+            print(f"[Live] Cancelled for user {user_id}")
         except Exception as e:
-            print(f"[Live] Event stream error: {e}")
+            print(f"[Live] ERROR for user {user_id}: {type(e).__name__}: {e}")
             traceback.print_exc()
             try:
                 await websocket.send_json({
