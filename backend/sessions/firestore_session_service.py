@@ -113,16 +113,15 @@ class FirestoreSessionService(BaseSessionService):
         session_id: Optional[str] = None,
     ) -> Session:
         import time
-        from google.adk.utils import platform_uuid
+        import uuid as _uuid
 
         if session_id is None:
-            session_id = platform_uuid.new_uuid()
+            session_id = str(_uuid.uuid4())
 
         # Check for existing session
         existing = await self._session_ref(app_name, user_id, session_id).get()
         if existing.exists:
-            from google.adk.errors import AlreadyExistsError
-            raise AlreadyExistsError(f"Session {session_id} already exists")
+            raise ValueError(f"Session {session_id} already exists")
 
         now = time.time()
 
