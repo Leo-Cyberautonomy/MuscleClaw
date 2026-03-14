@@ -20,7 +20,7 @@ class ADKClient {
   connect(handlers: MessageHandler) {
     this.handlers = handlers;
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = import.meta.env.VITE_WS_URL || `${protocol}//${location.hostname}:8000`;
+    const host = import.meta.env.VITE_WS_URL || `${protocol}//${location.host}`;
     this.ws = new WebSocket(`${host}/ws/${this.userId}`);
     this.ws.binaryType = 'arraybuffer';
 

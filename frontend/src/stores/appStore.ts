@@ -36,7 +36,7 @@ interface AppState {
 export const useAppStore = create<AppState>((set) => ({
   mode: 'idle',
   connected: false,
-  sidebarOpen: false,
+  sidebarOpen: true,
   safetyAlertActive: false,
   safetyCountdown: 0,
   restTimerSeconds: 0,
