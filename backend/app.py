@@ -83,6 +83,10 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     prefs = session.state.get("user:preferences", DEFAULT_PREFERENCES)
     voice_name = prefs.get("voice_name", "Charon")
 
+    # Note: affective_dialog, proactivity, session_resumption,
+    # context_window_compression require Vertex AI (v1alpha endpoint).
+    # With API Key mode these cause "invalid argument" errors.
+    # Enable them when switching to GOOGLE_GENAI_USE_VERTEXAI=TRUE.
     run_config = RunConfig(
         speech_config=types.SpeechConfig(
             voice_config=types.VoiceConfig(
@@ -94,22 +98,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
         response_modalities=["AUDIO"],
         output_audio_transcription=types.AudioTranscriptionConfig(),
         input_audio_transcription=types.AudioTranscriptionConfig(),
-        # Affective dialog — detect user emotions and adapt tone
-        enable_affective_dialog=True,
-        # Proactivity — model decides when to speak vs stay silent
-        proactivity=types.ProactivityConfig(
-            proactive_audio=True,
-        ),
-        # Session resumption — survive WebSocket disconnects (2h token)
-        session_resumption=types.SessionResumptionConfig(
-            handle=None,  # ADK manages token lifecycle
-        ),
-        # Context window compression — enable long training sessions
-        context_window_compression=types.ContextWindowCompressionConfig(
-            sliding_window=types.SlidingWindow(
-                target_tokens=50000,
-            ),
-        ),
     )
 
     await websocket.send_json({
