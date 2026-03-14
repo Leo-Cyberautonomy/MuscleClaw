@@ -2,7 +2,7 @@
 
 > Like Jarvis, but for the gym. Real-time AI fitness assistant with camera vision, voice interaction, gesture control, and AR overlays.
 
-Built for the **Gemini Live Agent Challenge** using Google ADK + Gemini 2.0 Flash.
+Built for the **Gemini Live Agent Challenge** using Google ADK + Gemini Live API (bidi-streaming audio/video).
 
 ## What it does
 
@@ -26,7 +26,7 @@ Browser (30fps)                         Cloud Run
 │ MediaPipe Pose   │  audio (16kHz)  │   ↓                   │
 │ MediaPipe Hand   │  video (1fps)   │ ADK Runner             │
 │ CV Engine:       │  CV events      │   ↓                   │
-│  · Rep Counter   │←────────────────│ Gemini 2.0 Flash      │
+│  · Rep Counter   │←────────────────│ Gemini Live API      │
 │  · Safety Monitor│  audio (24kHz)  │   · Voice conversation│
 │  · Gestures      │  UI commands    │   · Vision understanding│
 │ Canvas 2D AR     │  transcripts    │   · Tool calling      │
@@ -55,7 +55,7 @@ Browser (30fps)                         Cloud Run
 | Audio | Web Audio API (PCM 16kHz capture, 24kHz playback) |
 | State | Zustand |
 | AI Framework | Google ADK |
-| AI Model | Gemini 2.0 Flash |
+| AI Model | Gemini 2.5 Flash Native Audio (Live API bidi-streaming) |
 | Backend | FastAPI + WebSocket |
 | Deployment | Google Cloud Run |
 

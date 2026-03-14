@@ -228,7 +228,7 @@ SYSTEM_INSTRUCTION = """你是 MuscleClaw，一个像贾维斯一样的 AI 健�
 
 root_agent = Agent(
     name="muscleclaw",
-    model="gemini-2.5-flash",
+    model="gemini-2.5-flash-native-audio-preview-12-2025",
     instruction=SYSTEM_INSTRUCTION,
     tools=[
         get_body_profile, update_body_profile,
