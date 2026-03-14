@@ -3,6 +3,7 @@ import asyncio
 import json
 import os
 import pathlib
+import traceback
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -46,6 +47,35 @@ async def get_exercises():
     return {"data": EXERCISE_LIBRARY}
 
 
+async def run_agent(websocket: WebSocket, user_id: str, session_id: str, text: str):
+    """Run agent and stream text responses back to the WebSocket."""
+    try:
+        async for event in runner.run_async(
+            user_id=user_id,
+            session_id=session_id,
+            new_message=types.Content(
+                role="user",
+                parts=[types.Part(text=text)]
+            ),
+        ):
+            if event.content and event.content.parts:
+                for part in event.content.parts:
+                    if part.text:
+                        await websocket.send_json({
+                            "type": "transcript",
+                            "role": "model",
+                            "text": part.text,
+                        })
+    except Exception as e:
+        print(f"[Agent] Error: {e}")
+        traceback.print_exc()
+        await websocket.send_json({
+            "type": "transcript",
+            "role": "model",
+            "text": f"系统错误: {str(e)[:200]}",
+        })
+
+
 @app.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: str):
     await websocket.accept()
@@ -69,60 +99,28 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             data = await websocket.receive()
 
             if "bytes" in data and data["bytes"]:
-                # Binary audio from frontend — forward to Gemini
-                # TODO: integrate with ADK run_live for bidi-streaming
+                # Binary audio — TODO: integrate with ADK run_live
                 pass
 
             elif "text" in data and data["text"]:
                 msg = json.loads(data["text"])
 
                 if msg["type"] == "text":
-                    # Text message → run agent
-                    async for event in runner.run_async(
-                        user_id=user_id,
-                        session_id=session.id,
-                        new_message=types.Content(
-                            role="user",
-                            parts=[types.Part(text=msg["text"])]
-                        ),
-                    ):
-                        if event.content and event.content.parts:
-                            for part in event.content.parts:
-                                if part.text:
-                                    await websocket.send_json({
-                                        "type": "transcript",
-                                        "role": "model",
-                                        "text": part.text,
-                                    })
+                    await run_agent(websocket, user_id, session.id, msg["text"])
 
                 elif msg["type"] == "cv_event":
-                    # CV event → inject as user message
                     cv_text = f"[CV] {json.dumps(msg['event'], ensure_ascii=False)}"
-                    async for event in runner.run_async(
-                        user_id=user_id,
-                        session_id=session.id,
-                        new_message=types.Content(
-                            role="user",
-                            parts=[types.Part(text=cv_text)]
-                        ),
-                    ):
-                        if event.content and event.content.parts:
-                            for part in event.content.parts:
-                                if part.text:
-                                    await websocket.send_json({
-                                        "type": "transcript",
-                                        "role": "model",
-                                        "text": part.text,
-                                    })
+                    await run_agent(websocket, user_id, session.id, cv_text)
 
                 elif msg["type"] == "video_frame":
-                    # Video frame — will integrate with run_live for Gemini vision
+                    # TODO: integrate with run_live for Gemini vision
                     pass
 
     except WebSocketDisconnect:
         pass
     except Exception as e:
         print(f"[WS] Error for user {user_id}: {e}")
+        traceback.print_exc()
 
 
 # Serve frontend static files in production

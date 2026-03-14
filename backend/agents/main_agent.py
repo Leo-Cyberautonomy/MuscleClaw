@@ -16,25 +16,25 @@ def get_body_profile(ctx) -> dict:
     return ctx.session.state.get("user:body_profile", DEFAULT_BODY_PROFILE)
 
 
-def update_body_profile(ctx, part: str, max_weight: float = None,
-                        last_trained: str = None, notes: str = None) -> str:
+def update_body_profile(ctx, part: str, max_weight: float = 0,
+                        last_trained: str = "", notes: str = "") -> str:
     """更新某个身体部位的数据。part: chest|shoulders|back|legs|core|arms"""
     profile = ctx.session.state.get("user:body_profile", DEFAULT_BODY_PROFILE.copy())
     if part not in profile:
         return f"未知部位: {part}"
-    if max_weight is not None and max_weight > profile[part].get("max_weight", 0):
+    if max_weight > 0 and max_weight > profile[part].get("max_weight", 0):
         profile[part]["max_weight"] = max_weight
-    if last_trained is not None:
+    if last_trained:
         profile[part]["last_trained"] = last_trained
         profile[part]["recovery_status"] = "recovering"
-    if notes is not None:
+    if notes:
         profile[part]["notes"] = notes
     ctx.session.state["user:body_profile"] = profile
     return f"已更新 {part}: max_weight={profile[part]['max_weight']}kg"
 
 
-def get_training_history(ctx, days: int = 30, exercise_id: str = None) -> dict:
-    """获取最近N天训练记录。"""
+def get_training_history(ctx, days: int = 30, exercise_id: str = "") -> dict:
+    """获取最近N天训练记录。exercise_id留空则返回全部。"""
     history = ctx.session.state.get("user:training_history", [])
     if exercise_id:
         filtered = []
@@ -47,14 +47,13 @@ def get_training_history(ctx, days: int = 30, exercise_id: str = None) -> dict:
 
 
 def record_training_set(ctx, exercise_id: str, set_number: int,
-                        reps: int, weight: float, rpe: float = None,
-                        rom_avg_degrees: float = None,
-                        symmetry_score: float = None) -> str:
+                        reps: int, weight: float, rpe: float = 0,
+                        rom_avg_degrees: float = 0,
+                        symmetry_score: float = 0) -> str:
     """记录一组训练数据。"""
     history = ctx.session.state.get("user:training_history", [])
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-    # Find or create today's session
     today_session = None
     for s in history:
         if s["date"] == today:
@@ -66,7 +65,6 @@ def record_training_set(ctx, exercise_id: str, set_number: int,
                          "end_time": None, "exercises": []}
         history.append(today_session)
 
-    # Find or create exercise record
     ex_record = None
     for e in today_session["exercises"]:
         if e["exercise_id"] == exercise_id:
@@ -78,8 +76,8 @@ def record_training_set(ctx, exercise_id: str, set_number: int,
 
     ex_record["sets"].append({
         "set_number": set_number, "reps": reps, "weight": weight,
-        "rpe": rpe, "rom_avg_degrees": rom_avg_degrees,
-        "symmetry_score": symmetry_score,
+        "rpe": rpe or None, "rom_avg_degrees": rom_avg_degrees or None,
+        "symmetry_score": symmetry_score or None,
     })
     ctx.session.state["user:training_history"] = history
 
@@ -87,17 +85,18 @@ def record_training_set(ctx, exercise_id: str, set_number: int,
     return f"已记录: {ex_name} 第{set_number}组 {weight}kg×{reps}"
 
 
-def generate_training_plan(ctx, target_parts: list = None) -> dict:
-    """基于身体档案生成训练计划。返回训练计划对象。"""
+def generate_training_plan(ctx, target_parts: str = "") -> dict:
+    """基于身体档案生成训练计划。target_parts: 逗号分隔的部位如'chest,shoulders'。留空则自动推荐已恢复部位。"""
     profile = ctx.session.state.get("user:body_profile", DEFAULT_BODY_PROFILE)
-    if not target_parts:
-        # Auto-recommend: pick recovered parts
-        target_parts = [p for p, d in profile.items() if d["recovery_status"] == "recovered"]
-        if not target_parts:
-            target_parts = ["chest", "back"]  # fallback
+
+    parts = [p.strip() for p in target_parts.split(",") if p.strip()] if target_parts else []
+    if not parts:
+        parts = [p for p, d in profile.items() if d["recovery_status"] == "recovered"]
+        if not parts:
+            parts = ["chest", "back"]
 
     exercises = []
-    for part in target_parts:
+    for part in parts:
         ex_id = profile.get(part, {}).get("exercise", "bench_press")
         max_w = profile.get(part, {}).get("max_weight", 0)
         target_w = round(max_w * 0.85, 1) if max_w > 0 else 20
@@ -106,7 +105,7 @@ def generate_training_plan(ctx, target_parts: list = None) -> dict:
             "target_reps": 6, "target_weight": target_w, "completed": False,
         })
 
-    plan = {"target_parts": target_parts, "exercises": exercises}
+    plan = {"target_parts": parts, "exercises": exercises}
     ctx.session.state["current_plan"] = plan
     return plan
 
@@ -133,17 +132,32 @@ def get_user_preferences(ctx) -> dict:
     return ctx.session.state.get("user:preferences", DEFAULT_PREFERENCES)
 
 
-def update_user_preferences(ctx, **kwargs) -> str:
-    """更新用户偏好。支持的字段: personality_mode, language, emergency_contact, rest_timer_seconds, safety_sensitivity"""
+def update_user_preferences(ctx, personality_mode: str = "",
+                            language: str = "",
+                            emergency_contact: str = "",
+                            rest_timer_seconds: int = 0,
+                            safety_sensitivity: str = "") -> str:
+    """更新用户偏好。只传需要修改的字段。personality_mode: professional|gentle|trash_talk"""
     prefs = ctx.session.state.get("user:preferences", DEFAULT_PREFERENCES.copy())
-    for k, v in kwargs.items():
-        if k in prefs:
-            prefs[k] = v
-    # Auto-update voice based on personality
-    if "personality_mode" in kwargs:
-        prefs["voice_name"] = VOICE_MAP.get(prefs["personality_mode"], "Charon")
+    updated = []
+    if personality_mode:
+        prefs["personality_mode"] = personality_mode
+        prefs["voice_name"] = VOICE_MAP.get(personality_mode, "Charon")
+        updated.append("personality_mode")
+    if language:
+        prefs["language"] = language
+        updated.append("language")
+    if emergency_contact:
+        prefs["emergency_contact"] = emergency_contact
+        updated.append("emergency_contact")
+    if rest_timer_seconds > 0:
+        prefs["rest_timer_seconds"] = rest_timer_seconds
+        updated.append("rest_timer_seconds")
+    if safety_sensitivity:
+        prefs["safety_sensitivity"] = safety_sensitivity
+        updated.append("safety_sensitivity")
     ctx.session.state["user:preferences"] = prefs
-    return f"偏好已更新: {list(kwargs.keys())}"
+    return f"偏好已更新: {updated}" if updated else "没有需要更新的字段"
 
 
 def get_exercise_info(ctx, exercise_id: str) -> dict:
