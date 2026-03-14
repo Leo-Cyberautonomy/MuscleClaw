@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime, timezone
 
 from google.adk.agents import Agent
+from google.adk.tools.tool_context import ToolContext
 
 from config.defaults import DEFAULT_BODY_PROFILE, DEFAULT_PREFERENCES, VOICE_MAP
 from config.exercise_library import EXERCISE_LIBRARY
@@ -11,12 +12,12 @@ from config.exercise_library import EXERCISE_LIBRARY
 
 # ── Tool Definitions ──────────────────────────────────────────────
 
-def get_body_profile(ctx) -> dict:
+def get_body_profile(ctx: ToolContext) -> dict:
     """获取用户六大身体部位的力量数据和恢复状态。"""
     return ctx.session.state.get("user:body_profile", DEFAULT_BODY_PROFILE)
 
 
-def update_body_profile(ctx, part: str, max_weight: float = 0,
+def update_body_profile(ctx: ToolContext, part: str, max_weight: float = 0,
                         last_trained: str = "", notes: str = "") -> str:
     """更新某个身体部位的数据。part: chest|shoulders|back|legs|core|arms"""
     profile = ctx.session.state.get("user:body_profile", DEFAULT_BODY_PROFILE.copy())
@@ -33,7 +34,7 @@ def update_body_profile(ctx, part: str, max_weight: float = 0,
     return f"已更新 {part}: max_weight={profile[part]['max_weight']}kg"
 
 
-def get_training_history(ctx, days: int = 30, exercise_id: str = "") -> dict:
+def get_training_history(ctx: ToolContext, days: int = 30, exercise_id: str = "") -> dict:
     """获取最近N天训练记录。exercise_id留空则返回全部。"""
     history = ctx.session.state.get("user:training_history", [])
     if exercise_id:
@@ -46,7 +47,7 @@ def get_training_history(ctx, days: int = 30, exercise_id: str = "") -> dict:
     return {"sessions": history[-50:], "total": len(history)}
 
 
-def record_training_set(ctx, exercise_id: str, set_number: int,
+def record_training_set(ctx: ToolContext, exercise_id: str, set_number: int,
                         reps: int, weight: float, rpe: float = 0,
                         rom_avg_degrees: float = 0,
                         symmetry_score: float = 0) -> str:
@@ -85,7 +86,7 @@ def record_training_set(ctx, exercise_id: str, set_number: int,
     return f"已记录: {ex_name} 第{set_number}组 {weight}kg×{reps}"
 
 
-def generate_training_plan(ctx, target_parts: str = "") -> dict:
+def generate_training_plan(ctx: ToolContext, target_parts: str = "") -> dict:
     """基于身体档案生成训练计划。target_parts: 逗号分隔的部位如'chest,shoulders'。留空则自动推荐已恢复部位。"""
     profile = ctx.session.state.get("user:body_profile", DEFAULT_BODY_PROFILE)
 
@@ -110,7 +111,7 @@ def generate_training_plan(ctx, target_parts: str = "") -> dict:
     return plan
 
 
-def trigger_safety_alert(ctx, alert_type: str, countdown_seconds: int = 10) -> str:
+def trigger_safety_alert(ctx: ToolContext, alert_type: str, countdown_seconds: int = 10) -> str:
     """触发安全警报。alert_type: barbell_stall|body_collapse|unresponsive"""
     ctx.session.state["safety_alert_active"] = True
     ctx.session.state["safety_countdown"] = countdown_seconds
@@ -121,18 +122,18 @@ def trigger_safety_alert(ctx, alert_type: str, countdown_seconds: int = 10) -> s
     return f"安全警报已触发({alert_type})，{countdown_seconds}秒后拨打 {contact}"
 
 
-def cancel_safety_alert(ctx) -> str:
+def cancel_safety_alert(ctx: ToolContext) -> str:
     """取消安全警报。"""
     ctx.session.state["safety_alert_active"] = False
     return "安全警报已取消"
 
 
-def get_user_preferences(ctx) -> dict:
+def get_user_preferences(ctx: ToolContext) -> dict:
     """获取用户偏好设置。"""
     return ctx.session.state.get("user:preferences", DEFAULT_PREFERENCES)
 
 
-def update_user_preferences(ctx, personality_mode: str = "",
+def update_user_preferences(ctx: ToolContext, personality_mode: str = "",
                             language: str = "",
                             emergency_contact: str = "",
                             rest_timer_seconds: int = 0,
@@ -160,12 +161,12 @@ def update_user_preferences(ctx, personality_mode: str = "",
     return f"偏好已更新: {updated}" if updated else "没有需要更新的字段"
 
 
-def get_exercise_info(ctx, exercise_id: str) -> dict:
+def get_exercise_info(ctx: ToolContext, exercise_id: str) -> dict:
     """获取动作定义（关节追踪、角度阈值、安全规则）。"""
     return EXERCISE_LIBRARY.get(exercise_id, {"error": f"未知动作: {exercise_id}"})
 
 
-def analyze_posture(ctx, shoulder_tilt_degrees: float = 0,
+def analyze_posture(ctx: ToolContext, shoulder_tilt_degrees: float = 0,
                     pelvis_tilt_degrees: float = 0,
                     spine_curvature: str = "",
                     head_forward_cm: float = 0,
@@ -217,7 +218,7 @@ def analyze_posture(ctx, shoulder_tilt_degrees: float = 0,
     return report
 
 
-def send_ui_command(ctx, command: str, data_json: str = "") -> str:
+def send_ui_command(ctx: ToolContext, command: str, data_json: str = "") -> str:
     """发送 UI 指令给前端。
     command: show_body_panel|show_training_plan|show_posture_report|start_rest_timer|switch_mode
     data_json: JSON 格式的数据负载，如 '{"seconds": 120}' 或 '{"mode": "training"}'
