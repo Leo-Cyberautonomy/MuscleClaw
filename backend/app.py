@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from google.adk.runners import Runner
 from google.adk.agents.live_request_queue import LiveRequestQueue
-from google.adk.agents.run_config import RunConfig, ToolThreadPoolConfig
+from google.adk.agents.run_config import RunConfig
 from sessions.firestore_session_service import FirestoreSessionService
 from google.genai import types
 
@@ -110,8 +110,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                 target_tokens=50000,
             ),
         ),
-        # Run tool calls in background threads to keep event loop responsive
-        tool_thread_pool_config=ToolThreadPoolConfig(max_workers=4),
     )
 
     await websocket.send_json({
