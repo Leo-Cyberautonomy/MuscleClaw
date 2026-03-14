@@ -18,7 +18,7 @@ from google.adk.agents.run_config import RunConfig
 from sessions.firestore_session_service import FirestoreSessionService
 from google.genai import types
 
-from agents.main_agent import root_agent
+from agents.main_agent import root_agent, minimal_test_agent
 from config.defaults import DEFAULT_PREFERENCES
 from config.exercise_library import EXERCISE_LIBRARY
 
@@ -59,6 +59,56 @@ async def health():
 @app.get("/api/exercises")
 async def get_exercises():
     return {"data": EXERCISE_LIBRARY}
+
+
+# ── Minimal test endpoint to isolate Live API issues ──────────
+test_runner = Runner(
+    app_name="muscleclaw_test",
+    agent=minimal_test_agent,
+    session_service=session_service,
+)
+
+@app.websocket("/ws-test/{user_id}")
+async def websocket_test(websocket: WebSocket, user_id: str):
+    """Bare-bones Live API test — no tools, no RunConfig extras."""
+    await websocket.accept()
+    session = await session_service.create_session(
+        app_name="muscleclaw_test", user_id=user_id
+    )
+    live_queue = LiveRequestQueue()
+    await websocket.send_json({"type": "connected", "session_id": session.id})
+
+    async def fwd():
+        try:
+            async for event in test_runner.run_live(
+                user_id=user_id, session_id=session.id,
+                live_request_queue=live_queue,
+            ):
+                if event.content and event.content.parts:
+                    for part in event.content.parts:
+                        if part.text and not event.partial:
+                            await websocket.send_json({
+                                "type": "transcript", "role": "model", "text": part.text
+                            })
+        except Exception as e:
+            print(f"[Test] Error: {e}")
+            traceback.print_exc()
+
+    task = asyncio.create_task(fwd())
+    try:
+        while True:
+            data = await websocket.receive()
+            if "text" in data and data["text"]:
+                msg = json.loads(data["text"])
+                if msg.get("type") == "text":
+                    live_queue.send_content(types.Content(
+                        role="user", parts=[types.Part(text=msg["text"])]
+                    ))
+    except WebSocketDisconnect:
+        pass
+    finally:
+        live_queue.close()
+        task.cancel()
 
 
 @app.websocket("/ws/{user_id}")
