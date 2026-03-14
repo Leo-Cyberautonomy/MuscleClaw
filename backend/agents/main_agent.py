@@ -310,6 +310,7 @@ root_agent = Agent(
         trigger_safety_alert, cancel_safety_alert,
         get_user_preferences, update_user_preferences,
         get_exercise_info,
+        analyze_posture, send_ui_command,
     ],
     # Note: sub_agents disabled in Live mode — they use non-Live models
     # and their transfer_to_agent tool declarations may cause "invalid argument"
