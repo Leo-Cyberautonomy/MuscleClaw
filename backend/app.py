@@ -125,10 +125,25 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                 "text": part.text,
                             })
 
-                # Detect function calls that should trigger UI commands
+                # Detect function responses — tool return values
+                for fr in (event.get_function_responses() or []):
+                    if fr.name == "generate_training_plan" and fr.response:
+                        plan_data = fr.response.get("result", fr.response)
+                        await websocket.send_json({
+                            "type": "ui_command",
+                            "command": "show_training_plan",
+                            "data": {"plan": plan_data},
+                        })
+                    elif fr.name == "analyze_posture" and fr.response:
+                        await websocket.send_json({
+                            "type": "ui_command",
+                            "command": "show_posture_report",
+                            "data": fr.response.get("result", fr.response),
+                        })
+
+                # Detect function calls for UI-triggering tools
                 for fc in (event.get_function_calls() or []):
                     if fc.name == "send_ui_command":
-                        # send_ui_command passes command/data in its args
                         args = fc.args or {}
                         data = {}
                         if args.get("data_json"):
@@ -141,14 +156,18 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                             "command": args.get("command", ""),
                             "data": data,
                         })
-                    elif fc.name in UI_COMMAND_MAP:
-                        ui_cmd = UI_COMMAND_MAP[fc.name]
-                        if ui_cmd:
-                            await websocket.send_json({
-                                "type": "ui_command",
-                                "command": ui_cmd,
-                                "data": fc.args or {},
-                            })
+                    elif fc.name == "trigger_safety_alert":
+                        await websocket.send_json({
+                            "type": "ui_command",
+                            "command": "show_safety_alert",
+                            "data": fc.args or {},
+                        })
+                    elif fc.name == "cancel_safety_alert":
+                        await websocket.send_json({
+                            "type": "ui_command",
+                            "command": "cancel_safety_alert",
+                            "data": {},
+                        })
 
         except asyncio.CancelledError:
             pass

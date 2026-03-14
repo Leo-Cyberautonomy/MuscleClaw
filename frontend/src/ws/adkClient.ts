@@ -71,7 +71,14 @@ class ADKClient {
     switch (command) {
       case 'switch_mode': app.setMode(data.mode); break;
       case 'show_body_panel': app.setBodyProfile(data.profile); app.setMode('body_scan'); break;
-      case 'show_training_plan': training.setTrainingPlan(data.plan); app.setMode('planning'); break;
+      case 'show_training_plan': {
+        // data.plan may be the plan object, or data itself may be the plan
+        const plan = data.plan ?? data;
+        console.log('[UI] Training plan received:', plan);
+        training.setTrainingPlan(plan);
+        app.setMode('planning');
+        break;
+      }
       case 'show_posture_report': app.setMode('posture'); break;
       case 'show_safety_alert': ui.setSafetyAlert(true, data.countdown_seconds); break;
       case 'cancel_safety_alert': ui.setSafetyAlert(false); break;
