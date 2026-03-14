@@ -317,10 +317,3 @@ root_agent = Agent(
     # errors with the Live API. Re-enable when using Vertex AI.
     # sub_agents=[image_gen_agent, analysis_agent],
 )
-
-# Minimal agent for debugging Live API connection issues
-minimal_test_agent = Agent(
-    name="test",
-    model="gemini-2.5-flash-native-audio-preview-12-2025",
-    instruction="You are a test agent. Respond briefly in Chinese.",
-)
