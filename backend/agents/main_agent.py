@@ -312,5 +312,8 @@ root_agent = Agent(
         get_exercise_info,
         analyze_posture, send_ui_command,
     ],
-    sub_agents=[image_gen_agent, analysis_agent],
+    # Note: sub_agents disabled in Live mode — they use non-Live models
+    # and their transfer_to_agent tool declarations may cause "invalid argument"
+    # errors with the Live API. Re-enable when using Vertex AI.
+    # sub_agents=[image_gen_agent, analysis_agent],
 )
