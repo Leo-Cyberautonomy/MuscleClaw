@@ -101,9 +101,17 @@ def generate_training_plan(ctx: ToolContext, target_parts: str = "") -> dict:
         ex_id = profile.get(part, {}).get("exercise", "bench_press")
         max_w = profile.get(part, {}).get("max_weight", 0)
         target_w = round(max_w * 0.85, 1) if max_w > 0 else 20
+        ex_info = EXERCISE_LIBRARY.get(ex_id, {})
         exercises.append({
-            "exercise_id": ex_id, "target_sets": 4,
-            "target_reps": 6, "target_weight": target_w, "completed": False,
+            "exercise_id": ex_id,
+            "name": ex_info.get("name", ex_id),
+            "name_en": ex_info.get("name_en", ""),
+            "primary_muscles": ex_info.get("primary_muscles", [part]),
+            "secondary_muscles": ex_info.get("secondary_muscles", []),
+            "target_sets": 4,
+            "target_reps": 6,
+            "target_weight": target_w,
+            "completed_sets": 0,
         })
 
     plan = {"target_parts": parts, "exercises": exercises}

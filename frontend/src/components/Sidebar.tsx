@@ -2,6 +2,7 @@ import { useAppStore } from '../stores/appStore';
 import { useTrainingStore } from '../stores/trainingStore';
 import { usePoseStore } from '../stores/poseStore';
 import { PostureReport } from './PostureReport';
+import { TrainingPlanCard } from './TrainingPlanCard';
 
 const PART_NAMES: Record<string, string> = {
   chest: '胸', shoulders: '肩', back: '背', legs: '腿', core: '核心', arms: '手臂',
@@ -106,25 +107,51 @@ export function Sidebar() {
         </div>
       )}
 
-      {/* Planning */}
-      {mode === 'planning' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {/* Planning + Training — both use TrainingPlanCard */}
+      {(mode === 'planning' || mode === 'training') && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {trainingPlan ? (
             <>
-              <div style={{ fontSize: 13, color: 'var(--color-text-dim)', marginBottom: 4 }}>
-                目标部位: {trainingPlan.target_parts?.map((p: string) => PART_NAMES[p] || p).join(', ')}
+              {/* Plan header */}
+              <div style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                fontSize: 12, color: 'var(--color-text-dim)',
+              }}>
+                <span>
+                  {trainingPlan.target_parts?.map((p: string) => PART_NAMES[p] || p).join(' + ')}
+                </span>
+                <span style={{ fontFamily: 'var(--font-mono)' }}>
+                  {trainingPlan.exercises?.length ?? 0} 个动作
+                </span>
               </div>
+
+              {/* Exercise cards */}
               {trainingPlan.exercises?.map((ex: any, i: number) => (
-                <div key={i} style={{
+                <TrainingPlanCard
+                  key={i}
+                  exercise={ex}
+                  index={i}
+                  activeIndex={training.activeExerciseIndex}
+                  currentSet={training.setNumber}
+                  setResults={training.exerciseResults[i] ?? []}
+                />
+              ))}
+
+              {/* Total volume summary */}
+              {mode === 'training' && Object.keys(training.exerciseResults).length > 0 && (
+                <div style={{
                   background: 'var(--color-panel)', borderRadius: 10,
                   border: '1px solid var(--color-border)', padding: 12,
+                  fontSize: 12, color: 'var(--color-text-dim)',
+                  display: 'flex', justifyContent: 'space-between',
                 }}>
-                  <div style={{ fontWeight: 600 }}>{ex.exercise_id}</div>
-                  <div style={{ fontSize: 13, color: 'var(--color-text-dim)' }}>
-                    {ex.target_sets}组 x {ex.target_reps}次 @ {ex.target_weight}kg
-                  </div>
+                  <span>总组数</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-text)' }}>
+                    {Object.values(training.exerciseResults).reduce((sum, sets) => sum + sets.length, 0)}
+                    /{trainingPlan.exercises?.reduce((s: number, e: any) => s + (e.target_sets ?? 4), 0) ?? 0}
+                  </span>
                 </div>
-              ))}
+              )}
             </>
           ) : (
             <div style={{
@@ -132,25 +159,12 @@ export function Sidebar() {
               border: '1px solid var(--color-border)', padding: 16,
               fontSize: 13, color: 'var(--color-text-dim)',
             }}>
-              在输入框中说"帮我制定训练计划"，AI 会根据你的身体状态生成方案。
+              {mode === 'planning'
+                ? '说"帮我制定训练计划"，AI 会根据你的身体状态生成方案。'
+                : '先制定训练计划，再开始训练。'
+              }
             </div>
           )}
-        </div>
-      )}
-
-      {/* Training */}
-      {mode === 'training' && (
-        <div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 48, fontWeight: 800, color: 'var(--color-brand)' }}>
-            {training.reps}
-          </div>
-          <div style={{ fontSize: 14, color: 'var(--color-text-dim)', marginTop: 4 }}>
-            第 {training.setNumber || 1} 组
-            {training.targetWeight > 0 && ` · 目标: ${training.targetWeight}kg x ${training.targetReps}`}
-          </div>
-          <div style={{ fontSize: 13, color: 'var(--color-text-dim)', marginTop: 12 }}>
-            做动作时会自动计数。竖大拇指确认完成一组。
-          </div>
         </div>
       )}
 
