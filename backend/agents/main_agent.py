@@ -304,8 +304,12 @@ root_agent = Agent(
     model="gemini-2.5-flash-native-audio-preview-12-2025",
     instruction=SYSTEM_INSTRUCTION,
     tools=[
-        get_body_profile,
-        get_user_preferences,
+        get_body_profile, update_body_profile,
+        get_training_history, record_training_set,
+        generate_training_plan,
+        trigger_safety_alert, cancel_safety_alert,
+        get_user_preferences, update_user_preferences,
+        get_exercise_info,
     ],
     # Note: sub_agents disabled in Live mode — they use non-Live models
     # and their transfer_to_agent tool declarations may cause "invalid argument"
