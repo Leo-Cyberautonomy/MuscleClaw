@@ -2,14 +2,20 @@ import { useRef, useEffect } from 'react';
 import { adkClient } from '../ws/adkClient';
 import { AudioEngine } from '../audio/audioEngine';
 import { useAppStore } from '../stores/appStore';
+import { useTrainingStore } from '../stores/trainingStore';
+import { usePoseStore } from '../stores/poseStore';
 import { initMediaPipe, detectPose, detectHands } from '../cv/mediapipe';
 import { processFrame as processRep } from '../cv/repCounter';
+import { analyzeAngles } from '../cv/angleAnalyzer';
+import { checkSymmetry } from '../cv/symmetryChecker';
+import { feedFrame as feedPosture, analyzePosture } from '../cv/postureScanner';
 import { checkSafety } from '../cv/safetyMonitor';
 import { detectGesture } from '../cv/gestureDetector';
 import { drawSkeleton } from '../render/skeleton';
 import { drawAngle } from '../render/angles';
 import { POSE } from '../cv/types';
 import type { Landmark } from '../cv/types';
+import { BodyPanel } from './BodyPanel';
 import { TrainingHUD } from './TrainingHUD';
 import { RestTimer } from './RestTimer';
 
@@ -18,9 +24,11 @@ const audioEngine = new AudioEngine();
 export function CameraView() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const mode = useAppStore((s) => s.mode);
   const connected = useAppStore((s) => s.connected);
   const landmarksRef = useRef<Landmark[] | null>(null);
+  const canvasSizeRef = useRef({ w: 0, h: 0 });
 
   useEffect(() => {
     let animId: number;
@@ -80,6 +88,7 @@ export function CameraView() {
           canvas.width = rect.width;
           canvas.height = rect.height;
         }
+        canvasSizeRef.current = { w: canvas.width, h: canvas.height };
 
         const ctx = canvas.getContext('2d')!;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -92,6 +101,7 @@ export function CameraView() {
             const landmarks = detectPose(video, timestamp);
             if (landmarks) {
               landmarksRef.current = landmarks;
+              usePoseStore.getState().setLandmarks(landmarks);
 
               // Draw skeleton (mirrored to match video)
               ctx.save();
@@ -102,18 +112,51 @@ export function CameraView() {
               // Draw elbow angles
               drawAngle(ctx, landmarks, POSE.LEFT_SHOULDER, POSE.LEFT_ELBOW, POSE.LEFT_WRIST, canvas.width, canvas.height);
               drawAngle(ctx, landmarks, POSE.RIGHT_SHOULDER, POSE.RIGHT_ELBOW, POSE.RIGHT_WRIST, canvas.width, canvas.height);
+
+              // Draw knee angles in squat mode
+              const currentExercise = useTrainingStore.getState().exerciseId;
+              if (currentExercise === 'squat') {
+                drawAngle(ctx, landmarks, POSE.LEFT_HIP, POSE.LEFT_KNEE, POSE.LEFT_ANKLE, canvas.width, canvas.height);
+                drawAngle(ctx, landmarks, POSE.RIGHT_HIP, POSE.RIGHT_KNEE, POSE.RIGHT_ANKLE, canvas.width, canvas.height);
+              }
               ctx.restore();
 
-              // CV analytics
+              // CV analytics based on mode
               const currentMode = useAppStore.getState().mode;
+
               if (currentMode === 'training') {
-                const exerciseId = useAppStore.getState().training.exerciseId || 'bench_press';
+                const exerciseId = useTrainingStore.getState().exerciseId || 'bench_press';
+
+                // Rep counting
                 const repEvent = processRep(landmarks, exerciseId);
                 if (repEvent) {
                   adkClient.sendCVEvent(repEvent);
                   if (repEvent.type === 'rep_complete') {
-                    useAppStore.getState().updateTraining({ reps: repEvent.rep });
+                    useTrainingStore.getState().updateTraining({ reps: repEvent.rep });
                   }
+                }
+
+                // Angle analysis for form correction
+                const formEvent = analyzeAngles(landmarks, exerciseId);
+                if (formEvent) {
+                  adkClient.sendCVEvent(formEvent);
+                }
+
+                // Symmetry checking
+                const symEvent = checkSymmetry(landmarks, exerciseId);
+                if (symEvent) {
+                  adkClient.sendCVEvent(symEvent);
+                }
+              }
+
+              // Posture scanning in posture mode
+              if (currentMode === 'posture') {
+                usePoseStore.getState().setPostureScanning(true);
+                const ready = feedPosture(landmarks);
+                if (ready) {
+                  const report = analyzePosture();
+                  usePoseStore.getState().setPostureReport(report);
+                  usePoseStore.getState().setPostureScanning(false);
                 }
               }
 
@@ -127,6 +170,7 @@ export function CameraView() {
             // Hand detection for gestures
             const hands = detectHands(video, timestamp);
             if (hands && hands.length > 0) {
+              usePoseStore.getState().setHandLandmarks(hands);
               const gestureEvent = detectGesture(hands);
               if (gestureEvent) {
                 adkClient.sendCVEvent(gestureEvent);
@@ -151,7 +195,7 @@ export function CameraView() {
   }, []);
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+    <div ref={containerRef} style={{ position: 'relative', width: '100%', height: '100%' }}>
       <video
         ref={videoRef}
         style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }}
@@ -160,6 +204,12 @@ export function CameraView() {
       <canvas
         ref={canvasRef}
         style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
+      />
+      {/* Floating body cards in body_scan mode */}
+      <BodyPanel
+        landmarks={landmarksRef.current}
+        canvasWidth={canvasSizeRef.current.w}
+        canvasHeight={canvasSizeRef.current.h}
       />
       <TrainingHUD />
       <RestTimer />

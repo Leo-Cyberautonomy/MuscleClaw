@@ -14,8 +14,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from google.adk.runners import Runner
 from google.adk.agents.live_request_queue import LiveRequestQueue
-from google.adk.agents.run_config import RunConfig
-from google.adk.sessions import InMemorySessionService
+from google.adk.agents.run_config import RunConfig, ToolThreadPoolConfig
+from sessions.firestore_session_service import FirestoreSessionService
 from google.genai import types
 
 from agents.main_agent import root_agent
@@ -31,8 +31,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Session service
-session_service = InMemorySessionService()
+# Session service — Firestore for true persistence on Cloud Run
+session_service = FirestoreSessionService(project=os.getenv("GCP_PROJECT", "muscleclaw"))
 
 runner = Runner(
     app_name="muscleclaw",
@@ -46,6 +46,8 @@ UI_COMMAND_MAP = {
     "trigger_safety_alert": "show_safety_alert",
     "cancel_safety_alert": "cancel_safety_alert",
     "generate_training_plan": "show_training_plan",
+    "analyze_posture": "show_posture_report",
+    "send_ui_command": None,  # handled specially — reads command from args
 }
 
 
@@ -92,6 +94,24 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
         response_modalities=["AUDIO"],
         output_audio_transcription=types.AudioTranscriptionConfig(),
         input_audio_transcription=types.AudioTranscriptionConfig(),
+        # Affective dialog — detect user emotions and adapt tone
+        enable_affective_dialog=True,
+        # Proactivity — model decides when to speak vs stay silent
+        proactivity=types.ProactivityConfig(
+            proactive_audio=True,
+        ),
+        # Session resumption — survive WebSocket disconnects (2h token)
+        session_resumption=types.SessionResumptionConfig(
+            handle=None,  # ADK manages token lifecycle
+        ),
+        # Context window compression — enable long training sessions
+        context_window_compression=types.ContextWindowCompressionConfig(
+            sliding_window=types.SlidingWindow(
+                target_tokens=50000,
+            ),
+        ),
+        # Run tool calls in background threads to keep event loop responsive
+        tool_thread_pool_config=ToolThreadPoolConfig(max_workers=4),
     )
 
     await websocket.send_json({
@@ -126,13 +146,28 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
 
                 # Detect function calls that should trigger UI commands
                 for fc in (event.get_function_calls() or []):
-                    ui_cmd = UI_COMMAND_MAP.get(fc.name)
-                    if ui_cmd:
+                    if fc.name == "send_ui_command":
+                        # send_ui_command passes command/data in its args
+                        args = fc.args or {}
+                        data = {}
+                        if args.get("data_json"):
+                            try:
+                                data = json.loads(args["data_json"])
+                            except (json.JSONDecodeError, TypeError):
+                                data = {}
                         await websocket.send_json({
                             "type": "ui_command",
-                            "command": ui_cmd,
-                            "data": fc.args or {},
+                            "command": args.get("command", ""),
+                            "data": data,
                         })
+                    elif fc.name in UI_COMMAND_MAP:
+                        ui_cmd = UI_COMMAND_MAP[fc.name]
+                        if ui_cmd:
+                            await websocket.send_json({
+                                "type": "ui_command",
+                                "command": ui_cmd,
+                                "data": fc.args or {},
+                            })
 
         except asyncio.CancelledError:
             pass

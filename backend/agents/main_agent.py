@@ -165,11 +165,83 @@ def get_exercise_info(ctx, exercise_id: str) -> dict:
     return EXERCISE_LIBRARY.get(exercise_id, {"error": f"未知动作: {exercise_id}"})
 
 
+def analyze_posture(ctx, shoulder_tilt_degrees: float = 0,
+                    pelvis_tilt_degrees: float = 0,
+                    spine_curvature: str = "",
+                    head_forward_cm: float = 0,
+                    notes: str = "") -> dict:
+    """分析用户体态并生成报告。传入 CV 引擎检测到的体态数据。
+    shoulder_tilt_degrees: 肩部倾斜角度（正=右肩高）
+    pelvis_tilt_degrees: 骨盆前倾角度
+    spine_curvature: 脊柱侧弯描述如'left_5deg'
+    head_forward_cm: 头部前移距离
+    notes: 其他观察
+    """
+    issues = []
+    if abs(shoulder_tilt_degrees) > 3:
+        side = "右" if shoulder_tilt_degrees > 0 else "左"
+        issues.append({
+            "type": "shoulder_imbalance",
+            "severity": "warning" if abs(shoulder_tilt_degrees) < 8 else "concern",
+            "detail": f"{side}肩偏高 {abs(shoulder_tilt_degrees):.1f}°",
+        })
+    if pelvis_tilt_degrees > 15:
+        issues.append({
+            "type": "anterior_pelvic_tilt",
+            "severity": "warning" if pelvis_tilt_degrees < 25 else "concern",
+            "detail": f"骨盆前倾 {pelvis_tilt_degrees:.1f}°",
+        })
+    if head_forward_cm > 3:
+        issues.append({
+            "type": "forward_head",
+            "severity": "warning" if head_forward_cm < 6 else "concern",
+            "detail": f"头部前移 {head_forward_cm:.1f}cm",
+        })
+    if spine_curvature:
+        issues.append({
+            "type": "scoliosis",
+            "severity": "concern",
+            "detail": f"脊柱侧弯: {spine_curvature}",
+        })
+
+    report = {
+        "issues": issues,
+        "issue_count": len(issues),
+        "overall": "良好" if len(issues) == 0 else ("需注意" if len(issues) <= 2 else "建议就医检查"),
+    }
+    if notes:
+        report["notes"] = notes
+
+    # Store latest posture report
+    ctx.session.state["user:posture_report"] = report
+    return report
+
+
+def send_ui_command(ctx, command: str, data_json: str = "") -> str:
+    """发送 UI 指令给前端。
+    command: show_body_panel|show_training_plan|show_posture_report|start_rest_timer|switch_mode
+    data_json: JSON 格式的数据负载，如 '{"seconds": 120}' 或 '{"mode": "training"}'
+    """
+    parsed_data = {}
+    if data_json:
+        try:
+            parsed_data = json.loads(data_json)
+        except json.JSONDecodeError:
+            return f"data_json 解析失败: {data_json}"
+
+    # Store the command so app.py can detect it via function call inspection
+    ctx.session.state["temp:last_ui_command"] = {
+        "command": command,
+        "data": parsed_data,
+    }
+    return f"UI 指令已发送: {command}"
+
+
 # ── Sub-Agents ────────────────────────────────────────────────────
 
 image_gen_agent = Agent(
     name="image_generator",
-    model="gemini-2.5-flash",
+    model="gemini-3.1-flash-image-preview",  # Nano Banana 2
     instruction=(
         "你是图像编辑专家。用户给你一张健身者摆姿势的照片。"
         "编辑这张照片让人看起来更强壮——明显的肌肉线条、更大的肌肉体积，但保持自然真实感。"
@@ -237,6 +309,7 @@ root_agent = Agent(
         trigger_safety_alert, cancel_safety_alert,
         get_user_preferences, update_user_preferences,
         get_exercise_info,
+        analyze_posture, send_ui_command,
     ],
     sub_agents=[image_gen_agent, analysis_agent],
 )

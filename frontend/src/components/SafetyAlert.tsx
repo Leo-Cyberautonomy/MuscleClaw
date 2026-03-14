@@ -1,13 +1,13 @@
-import { useAppStore } from '../stores/appStore';
+import { useUIStore } from '../stores/uiStore';
 import { useEffect } from 'react';
 
 export function SafetyAlert() {
-  const { safetyCountdown } = useAppStore();
+  const safetyCountdown = useUIStore((s) => s.safetyCountdown);
 
   useEffect(() => {
     if (safetyCountdown <= 0) return;
     const timer = setInterval(() => {
-      useAppStore.setState((s) => {
+      useUIStore.setState((s) => {
         if (s.safetyCountdown <= 1) {
           clearInterval(timer);
           return { safetyCountdown: 0 };

@@ -1,4 +1,7 @@
 import { useAppStore } from '../stores/appStore';
+import { useTrainingStore } from '../stores/trainingStore';
+import { usePoseStore } from '../stores/poseStore';
+import { PostureReport } from './PostureReport';
 
 const PART_NAMES: Record<string, string> = {
   chest: '胸', shoulders: '肩', back: '背', legs: '腿', core: '核心', arms: '手臂',
@@ -14,7 +17,14 @@ const DEFAULT_BODY_PROFILE: Record<string, any> = {
 };
 
 export function Sidebar() {
-  const { mode, bodyProfile, trainingPlan, training, transcript } = useAppStore();
+  const mode = useAppStore((s) => s.mode);
+  const bodyProfile = useAppStore((s) => s.bodyProfile);
+  const transcript = useAppStore((s) => s.transcript);
+  const trainingPlan = useTrainingStore((s) => s.trainingPlan);
+  const training = useTrainingStore();
+  const postureReport = usePoseStore((s) => s.postureReport);
+  const postureScanning = usePoseStore((s) => s.postureScanning);
+
   const profile = bodyProfile || DEFAULT_BODY_PROFILE;
 
   return (
@@ -51,7 +61,6 @@ export function Sidebar() {
               <li><b style={{ color: 'var(--color-text)' }}>开始训练</b> — 实时计数和动作纠正</li>
             </ul>
           </div>
-          {/* Chat transcript */}
           {transcript.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ fontSize: 13, color: 'var(--color-text-dim)', fontWeight: 600 }}>对话记录</div>
@@ -143,6 +152,11 @@ export function Sidebar() {
             做动作时会自动计数。竖大拇指确认完成一组。
           </div>
         </div>
+      )}
+
+      {/* Posture */}
+      {mode === 'posture' && (
+        <PostureReport report={postureReport} scanning={postureScanning} />
       )}
     </div>
   );

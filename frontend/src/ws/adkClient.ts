@@ -1,4 +1,6 @@
 import { useAppStore } from '../stores/appStore';
+import { useTrainingStore } from '../stores/trainingStore';
+import { useUIStore } from '../stores/uiStore';
 
 type MessageHandler = {
   onAudio?: (pcm: ArrayBuffer) => void;
@@ -62,15 +64,19 @@ class ADKClient {
   }
 
   private handleUICommand(command: string, data: any) {
-    const store = useAppStore.getState();
+    const app = useAppStore.getState();
+    const training = useTrainingStore.getState();
+    const ui = useUIStore.getState();
+
     switch (command) {
-      case 'switch_mode': store.setMode(data.mode); break;
-      case 'show_body_panel': store.setBodyProfile(data.profile); store.setMode('body_scan'); break;
-      case 'show_training_plan': store.setTrainingPlan(data.plan); store.setMode('planning'); break;
-      case 'show_safety_alert': store.setSafetyAlert(true, data.countdown_seconds); break;
-      case 'cancel_safety_alert': store.setSafetyAlert(false); break;
-      case 'start_rest_timer': store.setRestTimer(data.seconds); break;
-      case 'update_set_info': store.updateTraining(data); break;
+      case 'switch_mode': app.setMode(data.mode); break;
+      case 'show_body_panel': app.setBodyProfile(data.profile); app.setMode('body_scan'); break;
+      case 'show_training_plan': training.setTrainingPlan(data.plan); app.setMode('planning'); break;
+      case 'show_posture_report': app.setMode('posture'); break;
+      case 'show_safety_alert': ui.setSafetyAlert(true, data.countdown_seconds); break;
+      case 'cancel_safety_alert': ui.setSafetyAlert(false); break;
+      case 'start_rest_timer': training.setRestTimer(data.seconds); break;
+      case 'update_set_info': training.updateTraining(data); break;
     }
     this.handlers.onUICommand?.(command, data);
   }

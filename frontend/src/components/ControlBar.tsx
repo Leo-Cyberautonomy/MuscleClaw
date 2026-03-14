@@ -1,4 +1,5 @@
 import { useAppStore, type AppMode } from '../stores/appStore';
+import { useUIStore } from '../stores/uiStore';
 import { adkClient } from '../ws/adkClient';
 
 const MODES: { mode: AppMode; label: string; icon: string }[] = [
@@ -8,7 +9,9 @@ const MODES: { mode: AppMode; label: string; icon: string }[] = [
 ];
 
 export function ControlBar() {
-  const { mode, connected, sidebarOpen } = useAppStore();
+  const mode = useAppStore((s) => s.mode);
+  const connected = useAppStore((s) => s.connected);
+  const sidebarOpen = useUIStore((s) => s.sidebarOpen);
 
   function switchMode(m: AppMode) {
     const store = useAppStore.getState();
@@ -25,7 +28,7 @@ export function ControlBar() {
   }
 
   function toggleSidebar() {
-    useAppStore.getState().setSidebarOpen(!sidebarOpen);
+    useUIStore.getState().setSidebarOpen(!sidebarOpen);
   }
 
   return (

@@ -1,13 +1,13 @@
-import { useAppStore } from '../stores/appStore';
+import { useTrainingStore } from '../stores/trainingStore';
 import { useEffect } from 'react';
 
 export function RestTimer() {
-  const restTimerSeconds = useAppStore((s) => s.restTimerSeconds);
+  const restTimerSeconds = useTrainingStore((s) => s.restTimerSeconds);
 
   useEffect(() => {
     if (restTimerSeconds <= 0) return;
     const timer = setInterval(() => {
-      useAppStore.setState((s) => {
+      useTrainingStore.setState((s) => {
         if (s.restTimerSeconds <= 1) {
           clearInterval(timer);
           return { restTimerSeconds: 0 };
@@ -32,9 +32,7 @@ export function RestTimer() {
       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
     }}>
       <svg width={130} height={130} viewBox="0 0 130 130">
-        {/* Background circle */}
         <circle cx="65" cy="65" r={radius} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="4" />
-        {/* Progress circle */}
         <circle
           cx="65" cy="65" r={radius} fill="none"
           stroke="var(--color-brand)" strokeWidth="4"
@@ -43,7 +41,6 @@ export function RestTimer() {
           strokeDashoffset={circumference * (1 - progress)}
           transform="rotate(-90 65 65)"
         />
-        {/* Time text */}
         <text x="65" y="65" textAnchor="middle" dominantBaseline="central"
           fill="var(--color-text)" fontFamily="var(--font-mono)" fontSize="28" fontWeight="700">
           {minutes}:{seconds.toString().padStart(2, '0')}
