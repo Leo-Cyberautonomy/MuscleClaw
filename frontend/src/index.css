@@ -6,6 +6,10 @@
   --color-sidebar: rgba(10, 10, 15, 0.85);
   --color-brand: rgba(0, 180, 255, 1.0);
   --color-brand-dim: rgba(0, 180, 255, 0.3);
+  --color-brand-glow: rgba(0, 255, 240, 0.15);
+  --color-brand-bright: rgba(0, 255, 240, 1.0);
+  --color-success: rgba(0, 255, 128, 0.9);
+  --color-success-dim: rgba(0, 255, 128, 0.15);
   --color-skeleton: rgba(0, 255, 180, 0.7);
   --color-skeleton-glow: rgba(0, 255, 180, 0.15);
   --color-warning: rgba(255, 200, 0, 0.8);
@@ -13,6 +17,8 @@
   --color-text: rgba(255, 255, 255, 0.95);
   --color-text-dim: rgba(255, 255, 255, 0.5);
   --color-border: rgba(255, 255, 255, 0.06);
+  --hud-border: 1px solid rgba(0, 255, 240, 0.12);
+  --hud-border-active: 1px solid rgba(0, 255, 240, 0.4);
   --blur-panel: blur(12px);
   --blur-sidebar: blur(20px);
   --sidebar-width: 360px;
@@ -33,6 +39,8 @@ body {
 
 #root { width: 100%; height: 100%; }
 
+/* ── Keyframes ─────────────────────────────────────────────── */
+
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
@@ -47,3 +55,182 @@ body {
   from { opacity: 0; transform: translateX(20px); }
   to { opacity: 1; transform: translateX(0); }
 }
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes scanLine {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(200%); }
+}
+
+@keyframes borderGlow {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes energyPulse {
+  0%, 100% { box-shadow: 0 0 2px rgba(0, 255, 128, 0.4); }
+  50% { box-shadow: 0 0 8px rgba(0, 255, 128, 0.6); }
+}
+
+@keyframes slideInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInScale {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.002); }
+}
+
+@keyframes statusBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* ── HUD Card — corner bracket decoration ──────────────────── */
+
+.hud-card {
+  position: relative;
+  background: var(--color-panel);
+  backdrop-filter: var(--blur-panel);
+  border: 1px solid rgba(0, 255, 240, 0.08);
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.hud-card::before,
+.hud-card::after {
+  content: '';
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-color: rgba(0, 255, 240, 0.3);
+  border-style: solid;
+  pointer-events: none;
+  transition: opacity 0.3s, border-color 0.3s;
+  z-index: 1;
+}
+
+.hud-card::before {
+  top: -1px;
+  left: -1px;
+  border-width: 1.5px 0 0 1.5px;
+  border-radius: 4px 0 0 0;
+}
+
+.hud-card::after {
+  bottom: -1px;
+  right: -1px;
+  border-width: 0 1.5px 1.5px 0;
+  border-radius: 0 0 4px 0;
+}
+
+.hud-card:hover::before,
+.hud-card:hover::after {
+  opacity: 1;
+  border-color: rgba(0, 255, 240, 0.6);
+}
+
+/* ── HUD Scanline overlay ──────────────────────────────────── */
+
+.hud-scanline {
+  overflow: hidden;
+}
+
+.hud-scanline::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(0, 255, 240, 0.02) 45%,
+    rgba(0, 255, 240, 0.05) 50%,
+    rgba(0, 255, 240, 0.02) 55%,
+    transparent 100%
+  );
+  animation: scanLine 3s linear infinite;
+  pointer-events: none;
+  border-radius: inherit;
+  z-index: 1;
+}
+
+/* ── HUD Active glow ───────────────────────────────────────── */
+
+.hud-active {
+  border-color: rgba(0, 255, 240, 0.4) !important;
+  box-shadow:
+    0 0 15px rgba(0, 255, 240, 0.08),
+    0 0 30px rgba(0, 255, 240, 0.04),
+    inset 0 1px 0 rgba(0, 255, 240, 0.1);
+}
+
+.hud-active::before,
+.hud-active::after {
+  border-color: rgba(0, 255, 240, 0.6) !important;
+  animation: borderGlow 2s ease-in-out infinite;
+}
+
+/* ── HUD Completed ─────────────────────────────────────────── */
+
+.hud-completed {
+  border-color: rgba(0, 255, 128, 0.2) !important;
+  opacity: 0.7;
+}
+
+.hud-completed::before,
+.hud-completed::after {
+  border-color: rgba(0, 255, 128, 0.4) !important;
+}
+
+/* ── Progress bar glow ─────────────────────────────────────── */
+
+.hud-progress-glow {
+  animation: energyPulse 1.5s ease-in-out infinite;
+}
+
+/* ── Data readout (monospace + glow) ───────────────────────── */
+
+.hud-readout {
+  font-family: var(--font-mono);
+  letter-spacing: 0.05em;
+  text-shadow: 0 0 8px rgba(0, 255, 240, 0.3);
+}
+
+/* ── Sidebar scrollbar ─────────────────────────────────────── */
+
+.hud-sidebar::-webkit-scrollbar { width: 3px; }
+.hud-sidebar::-webkit-scrollbar-track { background: transparent; }
+.hud-sidebar::-webkit-scrollbar-thumb {
+  background: rgba(0, 255, 240, 0.2);
+  border-radius: 2px;
+}
+.hud-sidebar::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 255, 240, 0.4);
+}
+
+/* ── Stagger animation delays ──────────────────────────────── */
+
+.hud-stagger { animation: slideInUp 0.3s ease-out both; }
+.hud-stagger:nth-child(1) { animation-delay: 0s; }
+.hud-stagger:nth-child(2) { animation-delay: 0.06s; }
+.hud-stagger:nth-child(3) { animation-delay: 0.12s; }
+.hud-stagger:nth-child(4) { animation-delay: 0.18s; }
+.hud-stagger:nth-child(5) { animation-delay: 0.24s; }
+.hud-stagger:nth-child(6) { animation-delay: 0.30s; }
+.hud-stagger:nth-child(7) { animation-delay: 0.36s; }
+.hud-stagger:nth-child(8) { animation-delay: 0.42s; }
