@@ -216,8 +216,10 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
 
             if "bytes" in data and data["bytes"]:
                 # Audio binary from browser mic → Gemini Live
+                # Don't specify rate — browser may use 44.1k/48k, not 16k.
+                # Gemini Live API auto-resamples any PCM input.
                 live_queue.send_realtime(types.Blob(
-                    mime_type="audio/pcm;rate=16000",
+                    mime_type="audio/pcm",
                     data=data["bytes"],
                 ))
 

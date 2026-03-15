@@ -23,11 +23,13 @@ export class AudioEngine {
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
-        sampleRate: 16000,
       },
     });
 
-    this.captureCtx = new AudioContext({ sampleRate: 16000 });
+    // Use default sample rate — browser may not support 16kHz.
+    // Gemini Live API auto-resamples any input rate.
+    this.captureCtx = new AudioContext();
+    console.log(`[Audio] Capture sample rate: ${this.captureCtx.sampleRate}Hz`);
 
     // Register the AudioWorklet module
     const workletUrl = new URL('./pcm-worklet.js', import.meta.url);
@@ -42,9 +44,12 @@ export class AudioEngine {
     };
 
     source.connect(this.workletNode);
-    // AudioWorklet nodes don't need to connect to destination for capture,
-    // but some browsers require a connected graph to keep processing alive.
     this.workletNode.connect(this.captureCtx.destination);
+  }
+
+  /** Actual capture sample rate (may differ from requested 16kHz) */
+  get sampleRate(): number {
+    return this.captureCtx?.sampleRate ?? 16000;
   }
 
   // ── Playback ────────────────────────────────────────────────────
