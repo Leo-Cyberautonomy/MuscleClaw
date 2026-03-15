@@ -101,87 +101,104 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     })
 
     # Background task: consume events from run_live → forward to WebSocket
+    # With auto-retry on transient Gemini API errors (1008, etc.)
     async def forward_events():
-        try:
-            async for event in runner.run_live(
-                user_id=user_id,
-                session_id=session.id,
-                live_request_queue=live_queue,
-                run_config=run_config,
-            ):
-                if event.content and event.content.parts:
-                    for part in event.content.parts:
-                        # Audio output → send as binary WebSocket frame
-                        if (part.inline_data
-                                and part.inline_data.mime_type
-                                and part.inline_data.mime_type.startswith("audio/")):
-                            await websocket.send_bytes(part.inline_data.data)
+        max_retries = 3
+        current_session_id = session.id
 
-                        # Text transcript → send as JSON
-                        elif part.text and not event.partial:
+        for attempt in range(max_retries):
+            try:
+                async for event in runner.run_live(
+                    user_id=user_id,
+                    session_id=current_session_id,
+                    live_request_queue=live_queue,
+                    run_config=run_config,
+                ):
+                    if event.content and event.content.parts:
+                        for part in event.content.parts:
+                            if (part.inline_data
+                                    and part.inline_data.mime_type
+                                    and part.inline_data.mime_type.startswith("audio/")):
+                                await websocket.send_bytes(part.inline_data.data)
+                            elif part.text and not event.partial:
+                                await websocket.send_json({
+                                    "type": "transcript",
+                                    "role": "model",
+                                    "text": part.text,
+                                })
+
+                    for fr in (event.get_function_responses() or []):
+                        if fr.name == "generate_training_plan" and fr.response:
+                            plan_data = fr.response.get("result", fr.response)
                             await websocket.send_json({
-                                "type": "transcript",
-                                "role": "model",
-                                "text": part.text,
+                                "type": "ui_command",
+                                "command": "show_training_plan",
+                                "data": {"plan": plan_data},
+                            })
+                        elif fr.name == "analyze_posture" and fr.response:
+                            await websocket.send_json({
+                                "type": "ui_command",
+                                "command": "show_posture_report",
+                                "data": fr.response.get("result", fr.response),
                             })
 
-                # Detect function responses — tool return values
-                for fr in (event.get_function_responses() or []):
-                    if fr.name == "generate_training_plan" and fr.response:
-                        plan_data = fr.response.get("result", fr.response)
-                        await websocket.send_json({
-                            "type": "ui_command",
-                            "command": "show_training_plan",
-                            "data": {"plan": plan_data},
-                        })
-                    elif fr.name == "analyze_posture" and fr.response:
-                        await websocket.send_json({
-                            "type": "ui_command",
-                            "command": "show_posture_report",
-                            "data": fr.response.get("result", fr.response),
-                        })
+                    for fc in (event.get_function_calls() or []):
+                        if fc.name == "send_ui_command":
+                            args = fc.args or {}
+                            cmd_data = {}
+                            if args.get("data_json"):
+                                try:
+                                    cmd_data = json.loads(args["data_json"])
+                                except (json.JSONDecodeError, TypeError):
+                                    cmd_data = {}
+                            await websocket.send_json({
+                                "type": "ui_command",
+                                "command": args.get("command", ""),
+                                "data": cmd_data,
+                            })
+                        elif fc.name == "trigger_safety_alert":
+                            await websocket.send_json({
+                                "type": "ui_command",
+                                "command": "show_safety_alert",
+                                "data": fc.args or {},
+                            })
+                        elif fc.name == "cancel_safety_alert":
+                            await websocket.send_json({
+                                "type": "ui_command",
+                                "command": "cancel_safety_alert",
+                                "data": {},
+                            })
 
-                # Detect function calls for UI-triggering tools
-                for fc in (event.get_function_calls() or []):
-                    if fc.name == "send_ui_command":
-                        args = fc.args or {}
-                        data = {}
-                        if args.get("data_json"):
-                            try:
-                                data = json.loads(args["data_json"])
-                            except (json.JSONDecodeError, TypeError):
-                                data = {}
-                        await websocket.send_json({
-                            "type": "ui_command",
-                            "command": args.get("command", ""),
-                            "data": data,
-                        })
-                    elif fc.name == "trigger_safety_alert":
-                        await websocket.send_json({
-                            "type": "ui_command",
-                            "command": "show_safety_alert",
-                            "data": fc.args or {},
-                        })
-                    elif fc.name == "cancel_safety_alert":
-                        await websocket.send_json({
-                            "type": "ui_command",
-                            "command": "cancel_safety_alert",
-                            "data": {},
-                        })
+                # Normal exit — stream ended cleanly
+                break
 
-        except asyncio.CancelledError:
-            print(f"[Live] Cancelled for user {user_id}")
-        except Exception as e:
-            print(f"[Live] ERROR for user {user_id}: {type(e).__name__}: {e}")
-            traceback.print_exc()
-            try:
-                await websocket.send_json({
-                    "type": "transcript",
-                    "role": "model",
-                    "text": f"连接错误: {str(e)[:200]}",
-                })
-            except Exception:
-                pass
+            except asyncio.CancelledError:
+                print(f"[Live] Cancelled for user {user_id}")
+                return
+            except Exception as e:
+                print(f"[Live] ERROR for user {user_id} (attempt {attempt+1}/{max_retries}): {type(e).__name__}: {e}")
+                if attempt < max_retries - 1:
+                    # Create a fresh session and retry
+                    await asyncio.sleep(1)
+                    try:
+                        new_session = await session_service.create_session(
+                            app_name="muscleclaw", user_id=user_id
+                        )
+                        current_session_id = new_session.id
+                        print(f"[Live] Retrying with new session {current_session_id[:8]}...")
+                    except Exception as retry_err:
+                        print(f"[Live] Failed to create retry session: {retry_err}")
+                        break
+                else:
+                    traceback.print_exc()
+                    try:
+                        await websocket.send_json({
+                            "type": "transcript",
+                            "role": "model",
+                            "text": f"连接错误: {str(e)[:200]}",
+                        })
+                    except Exception:
+                        pass
 
     event_task = asyncio.create_task(forward_events())
 

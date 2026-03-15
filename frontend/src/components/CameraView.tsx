@@ -32,7 +32,7 @@ export function CameraView() {
 
   useEffect(() => {
     let animId: number;
-    let frameInterval: ReturnType<typeof setInterval>;
+    // frameInterval removed — video frames disabled for native audio model
     let mediaPipeReady = false;
     let frameCount = 0;
 
@@ -61,16 +61,9 @@ export function CameraView() {
         console.log('[MediaPipe] Ready');
       }).catch((err) => console.warn('[MediaPipe] Init failed:', err));
 
-      // Send 1fps JPEG to Gemini
-      frameInterval = setInterval(() => {
-        if (!videoRef.current) return;
-        const c = document.createElement('canvas');
-        c.width = 640; c.height = 360;
-        const ctx = c.getContext('2d')!;
-        ctx.drawImage(videoRef.current, 0, 0, 640, 360);
-        const jpeg = c.toDataURL('image/jpeg', 0.6).split(',')[1];
-        adkClient.sendVideoFrame(jpeg);
-      }, 1000);
+      // Note: Video frames disabled — native audio model doesn't support them.
+      // Visual understanding relies on CV engine events (text-based).
+      // Uncomment when switching to a model with video input support.
 
       // Main render + CV loop
       function renderLoop() {
@@ -188,7 +181,7 @@ export function CameraView() {
 
     return () => {
       cancelAnimationFrame(animId);
-      clearInterval(frameInterval);
+      // clearInterval(frameInterval); — disabled
       audioEngine.stop();
       adkClient.disconnect();
     };
