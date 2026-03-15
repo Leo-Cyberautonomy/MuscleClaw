@@ -191,11 +191,19 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                         break
                 else:
                     traceback.print_exc()
+                    # Show user-friendly message instead of raw API error
+                    err_str = str(e)
+                    if "1008" in err_str:
+                        user_msg = "AI 语音服务暂时不可用，可能是 API 调用次数达到限制。请稍后再试。"
+                    elif "1007" in err_str:
+                        user_msg = "AI 连接参数错误，请刷新页面重试。"
+                    else:
+                        user_msg = f"AI 连接中断，正在尝试恢复... ({type(e).__name__})"
                     try:
                         await websocket.send_json({
                             "type": "transcript",
                             "role": "model",
-                            "text": f"连接错误: {str(e)[:200]}",
+                            "text": user_msg,
                         })
                     except Exception:
                         pass
