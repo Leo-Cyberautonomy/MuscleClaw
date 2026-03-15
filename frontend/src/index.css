@@ -5,7 +5,7 @@
 :root {
   /* Backgrounds */
   --bg-page: #F2F2F7;
-  --bg-sidebar: rgba(255,255,255,.72);
+  --bg-sidebar: rgba(242,242,247,.97);
   --bg-card: #FFFFFF;
   --bg-card-hover: #FFFFFF;
   --bg-subtle: #F8F8FA;
@@ -55,6 +55,19 @@
   /* Fonts */
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
+
+  /* Legacy dark-overlay variables (for components on camera view) */
+  --color-bg: #0a0a0f;
+  --color-panel: rgba(10, 15, 25, 0.65);
+  --color-brand: #5E5CE6;
+  --color-brand-dim: rgba(94, 92, 230, 0.3);
+  --color-skeleton: rgba(0, 255, 180, 0.7);
+  --color-skeleton-glow: rgba(0, 255, 180, 0.15);
+  --color-text: rgba(255, 255, 255, 0.95);
+  --color-text-dim: rgba(255, 255, 255, 0.5);
+  --color-border: rgba(255, 255, 255, 0.1);
+  --blur-panel: blur(12px);
+  --blur-sidebar: blur(20px);
 
   /* Spring easing */
   --spring: cubic-bezier(.34, 1.56, .64, 1);

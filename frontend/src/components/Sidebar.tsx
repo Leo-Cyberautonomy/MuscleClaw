@@ -132,10 +132,9 @@ export function Sidebar() {
       {/* ── Sticky Header ────────────────────────────────── */}
       <div style={{
         padding: '20px 20px 16px',
-        background: 'linear-gradient(180deg, rgba(255,255,255,.9), rgba(255,255,255,.5))',
-        backdropFilter: 'blur(20px)',
+        background: 'rgba(242,242,247,.98)',
         position: 'sticky', top: 0, zIndex: 10,
-        borderBottom: '1px solid var(--border-light)',
+        borderBottom: '1px solid rgba(0,0,0,.06)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-.02em' }}>
