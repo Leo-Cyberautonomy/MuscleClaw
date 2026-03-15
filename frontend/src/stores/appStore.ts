@@ -8,7 +8,7 @@
  */
 import { create } from 'zustand';
 
-export type AppMode = 'idle' | 'body_scan' | 'planning' | 'training' | 'posture' | 'showcase';
+export type AppMode = 'idle' | 'dashboard' | 'body_scan' | 'planning' | 'training' | 'posture' | 'showcase';
 
 interface AppState {
   mode: AppMode;

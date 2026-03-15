@@ -2,10 +2,10 @@ import { useAppStore, type AppMode } from '../stores/appStore';
 import { useUIStore } from '../stores/uiStore';
 import { adkClient } from '../ws/adkClient';
 
-const MODES: { mode: AppMode; label: string; icon: string }[] = [
-  { mode: 'body_scan', label: '身体扫描', icon: '🦴' },
-  { mode: 'planning', label: '训练计划', icon: '📋' },
-  { mode: 'training', label: '开始训练', icon: '💪' },
+const MODES: { mode: AppMode; label: string }[] = [
+  { mode: 'dashboard', label: 'Dashboard' },
+  { mode: 'planning', label: 'Plan' },
+  { mode: 'training', label: 'Train' },
 ];
 
 export function ControlBar() {
@@ -22,7 +22,7 @@ export function ControlBar() {
       store.setMode(m);
       // Also tell backend about mode switch
       if (connected) {
-        adkClient.sendText(`[MODE] 切换到${m === 'body_scan' ? '身体扫描' : m === 'planning' ? '训练计划' : m === 'training' ? '训练模式' : m}`);
+        adkClient.sendText(`[MODE] 切换到${m === 'dashboard' ? '仪表盘' : m === 'planning' ? '训练计划' : m === 'training' ? '训练模式' : m}`);
       }
     }
   }
@@ -37,39 +37,36 @@ export function ControlBar() {
       display: 'flex', gap: 6, alignItems: 'center',
       animation: 'fadeIn 0.3s ease',
     }}>
-      {MODES.map(({ mode: m, label, icon }) => (
+      {MODES.map(({ mode: m, label }) => (
         <button
           key={m}
           onClick={() => switchMode(m)}
           style={{
-            background: mode === m ? 'var(--color-brand)' : 'var(--color-panel)',
-            backdropFilter: 'var(--blur-panel)',
-            border: `1px solid ${mode === m ? 'var(--color-brand)' : 'var(--color-border)'}`,
-            borderRadius: 8, padding: '6px 12px',
-            color: mode === m ? '#0a0a0f' : 'var(--color-text)',
-            fontSize: 13, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: 4,
-            transition: 'all 0.2s',
+            background: mode === m ? 'rgba(94,92,230,.9)' : 'rgba(0,0,0,.5)',
+            backdropFilter: 'blur(12px)',
+            border: `1px solid ${mode === m ? 'rgba(94,92,230,.6)' : 'rgba(255,255,255,.1)'}`,
+            borderRadius: 10, padding: '7px 14px',
+            color: '#fff',
+            fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            transition: 'all 0.25s cubic-bezier(.34,1.56,.64,1)',
             fontFamily: 'var(--font-sans)',
           }}
         >
-          <span>{icon}</span>
-          <span>{label}</span>
+          {label}
         </button>
       ))}
       <button
         onClick={toggleSidebar}
         style={{
-          background: sidebarOpen ? 'var(--color-brand)' : 'var(--color-panel)',
-          backdropFilter: 'var(--blur-panel)',
-          border: `1px solid ${sidebarOpen ? 'var(--color-brand)' : 'var(--color-border)'}`,
-          borderRadius: 8, width: 36, height: 36,
-          color: sidebarOpen ? '#0a0a0f' : 'var(--color-text)',
-          fontSize: 16, cursor: 'pointer',
+          background: sidebarOpen ? 'rgba(94,92,230,.9)' : 'rgba(0,0,0,.5)',
+          backdropFilter: 'blur(12px)',
+          border: `1px solid ${sidebarOpen ? 'rgba(94,92,230,.6)' : 'rgba(255,255,255,.1)'}`,
+          borderRadius: 10, width: 36, height: 36,
+          color: '#fff', fontSize: 16, cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          transition: 'all 0.2s',
+          transition: 'all 0.25s cubic-bezier(.34,1.56,.64,1)',
         }}
-        title="侧边栏"
+        title="Sidebar"
       >
         ☰
       </button>

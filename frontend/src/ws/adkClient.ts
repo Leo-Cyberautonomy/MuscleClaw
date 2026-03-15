@@ -70,7 +70,7 @@ class ADKClient {
 
     switch (command) {
       case 'switch_mode': app.setMode(data.mode); break;
-      case 'show_body_panel': app.setBodyProfile(data.profile); app.setMode('body_scan'); break;
+      case 'show_body_panel': app.setBodyProfile(data.profile); app.setMode('dashboard'); break;
       case 'show_training_plan': {
         // data.plan may be the plan object, or data itself may be the plan
         const plan = data.plan ?? data;

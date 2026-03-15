@@ -1,11 +1,10 @@
 /**
- * TrainingPlanCard — Jarvis HUD exercise card with corner brackets,
- * scan lines, energy progress bars, and three visual states.
+ * TrainingPlanCard — Apple Fitness+ style exercise card
  */
 
 const MUSCLE_COLOR: Record<string, string> = {
-  chest: '#ff4060', back: '#4488ff', shoulders: '#ff9020',
-  legs: '#00cc88', arms: '#aa66ff', core: '#ffcc00',
+  chest: '#FF2D55', back: '#007AFF', shoulders: '#FF9500',
+  legs: '#30D158', arms: '#AF52DE', core: '#FFD60A',
 };
 
 const MUSCLE_LABEL: Record<string, string> = {
@@ -40,7 +39,7 @@ export function TrainingPlanCard({
   const isCompleted = setResults.length >= exercise.target_sets;
   const isPending = activeIndex >= 0 && index > activeIndex;
 
-  const primaryColor = MUSCLE_COLOR[exercise.primary_muscles[0]] ?? '#888';
+  const primaryColor = MUSCLE_COLOR[exercise.primary_muscles[0]] ?? '#8e8e93';
   const allMuscles = [
     ...exercise.primary_muscles.map(m => MUSCLE_LABEL[m] ?? m),
     ...exercise.secondary_muscles.map(m => MUSCLE_LABEL[m] ?? m),
@@ -49,92 +48,78 @@ export function TrainingPlanCard({
   const completedSets = setResults.length;
   const totalSets = exercise.target_sets;
 
-  // Build className
-  const classes = [
-    'hud-card',
-    isActive && 'hud-active hud-scanline',
-    isCompleted && 'hud-completed',
-  ].filter(Boolean).join(' ');
-
   return (
-    <div className={classes} style={{
-      padding: 0,
-      opacity: isPending ? 0.6 : undefined,
+    <div style={{
+      background: 'var(--bg-card)',
+      borderRadius: 'var(--radius-card)',
+      boxShadow: isActive
+        ? '0 2px 8px rgba(94,92,230,.1), 0 4px 16px rgba(94,92,230,.06)'
+        : 'var(--shadow-card)',
+      border: isActive ? '1px solid rgba(94,92,230,.15)' : '1px solid transparent',
       overflow: 'hidden',
+      opacity: isPending ? 0.6 : isCompleted ? 0.7 : 1,
+      transition: 'all .3s var(--spring)',
+      position: 'relative',
     }}>
-      {/* Completed green accent */}
+      {/* Green left accent for completed */}
       {isCompleted && (
         <div style={{
-          position: 'absolute', left: 0, top: 0, bottom: 0, width: 2,
-          background: '#00ff80', zIndex: 2,
+          position: 'absolute', left: 0, top: 0, bottom: 0, width: 3,
+          background: '#34c759', borderRadius: '16px 0 0 16px',
         }} />
       )}
 
       {/* Header */}
-      <div style={{ padding: '10px 12px 6px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-          <span style={{
-            width: 7, height: 7, borderRadius: '50%',
-            background: primaryColor,
-            boxShadow: `0 0 8px ${primaryColor}`,
-            flexShrink: 0,
-          }} />
-          <span style={{
-            fontSize: 13, fontWeight: 700, color: 'var(--color-text)',
-            fontFamily: 'var(--font-mono)', letterSpacing: '0.03em',
-          }}>
+      <div style={{ padding: '13px 16px 8px', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{
+          width: 9, height: 9, borderRadius: '50%',
+          background: primaryColor,
+          boxShadow: `0 0 6px ${primaryColor}60`,
+          flexShrink: 0,
+        }} />
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
             {exercise.name}
-          </span>
-          <span style={{
-            fontSize: 10, color: 'rgba(0, 255, 240, 0.35)',
-            fontFamily: 'var(--font-mono)', textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-          }}>
-            {exercise.name_en}
-          </span>
-        </div>
-        <div style={{
-          fontSize: 9, color: 'var(--color-text-dim)', marginTop: 2, paddingLeft: 14,
-          fontFamily: 'var(--font-mono)', letterSpacing: '0.05em',
-        }}>
-          {allMuscles.join(' · ')}
+            <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 500, marginLeft: 6 }}>
+              {exercise.name_en}
+            </span>
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 1 }}>
+            {allMuscles.join(' · ')}
+          </div>
         </div>
       </div>
 
-      {/* Segmented progress bar */}
-      <div style={{ padding: '0 12px', display: 'flex', alignItems: 'center', gap: 6 }}>
+      {/* Progress bar */}
+      <div style={{ padding: '4px 16px 6px', display: 'flex', alignItems: 'center', gap: 8 }}>
         <div style={{
-          flex: 1, height: 5, borderRadius: 2,
-          background: 'rgba(255,255,255,0.04)',
+          flex: 1, height: 5, borderRadius: 5,
+          background: 'var(--border-separator)',
           display: 'flex', gap: 2, overflow: 'hidden',
         }}>
-          {Array.from({ length: totalSets }).map((_, i) => {
-            const filled = i < completedSets;
-            const current = isActive && i === completedSets;
-            return (
-              <div key={i} className={filled ? 'hud-progress-glow' : ''} style={{
-                flex: 1, borderRadius: 1,
-                background: filled
-                  ? '#00ff80'
-                  : current
-                    ? 'rgba(0, 255, 240, 0.4)'
-                    : 'rgba(255,255,255,0.03)',
-                transition: 'background 0.4s ease',
-              }} />
-            );
-          })}
+          {Array.from({ length: totalSets }).map((_, i) => (
+            <div key={i} style={{
+              flex: 1, borderRadius: 3,
+              background: i < completedSets
+                ? '#34c759'
+                : (isActive && i === completedSets)
+                  ? 'rgba(94,92,230,.4)'
+                  : 'transparent',
+              transition: 'background .4s var(--spring)',
+              boxShadow: i < completedSets ? '0 0 4px rgba(52,199,89,.3)' : 'none',
+            }} />
+          ))}
         </div>
         <span style={{
-          fontFamily: 'var(--font-mono)', fontSize: 10,
-          color: completedSets >= totalSets ? '#00ff80' : 'var(--color-text-dim)',
-          minWidth: 32, textAlign: 'right', letterSpacing: '0.05em',
+          fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700,
+          color: completedSets >= totalSets ? '#34c759' : 'var(--text-tertiary)',
         }}>
           {completedSets}/{totalSets}
         </span>
       </div>
 
       {/* Set rows */}
-      <div style={{ padding: '6px 12px 10px' }}>
+      <div style={{ padding: '4px 16px 12px' }}>
         {Array.from({ length: totalSets }).map((_, i) => {
           const setNum = i + 1;
           const result = setResults[i];
@@ -143,63 +128,44 @@ export function TrainingPlanCard({
 
           return (
             <div key={i} style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '3px 4px',
-              background: isCurrent ? 'rgba(0, 255, 240, 0.06)' : 'transparent',
-              borderRadius: 3,
-              borderLeft: isCurrent ? '2px solid rgba(0, 255, 240, 0.5)' : '2px solid transparent',
-              transition: 'all 0.3s',
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '5px 6px',
+              background: isCurrent ? 'rgba(94,92,230,.06)' : 'transparent',
+              borderRadius: 8,
+              borderLeft: isCurrent ? '2px solid var(--brand-purple)' : '2px solid transparent',
+              transition: 'all .3s',
             }}>
-              {/* Set number */}
               <span style={{
-                fontFamily: 'var(--font-mono)', fontSize: 10,
-                color: 'rgba(255,255,255,0.3)', width: 14, textAlign: 'center',
+                fontFamily: 'var(--font-mono)', fontSize: 11,
+                color: 'var(--text-quaternary)', width: 16, textAlign: 'center',
               }}>
                 {setNum}
               </span>
-
-              {/* Checkbox */}
               <span style={{
-                width: 14, height: 14, borderRadius: 3,
-                border: isDone ? '1px solid #00ff80' : '1px solid rgba(255,255,255,0.12)',
-                background: isDone ? 'rgba(0, 255, 128, 0.12)' : 'transparent',
+                width: 16, height: 16, borderRadius: 5,
+                border: isDone ? '1.5px solid #34c759' : '1.5px solid #e5e5ea',
+                background: isDone ? 'rgba(52,199,89,.1)' : 'transparent',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 9, color: '#00ff80', flexShrink: 0,
-                transition: 'all 0.3s',
+                fontSize: 9, color: '#34c759', flexShrink: 0, fontWeight: 800,
               }}>
                 {isDone && '✓'}
               </span>
-
-              {/* Weight x Reps */}
               <span style={{
-                flex: 1, fontFamily: 'var(--font-mono)', fontSize: 11,
-                color: isDone ? 'var(--color-text)' : 'rgba(255,255,255,0.25)',
-                letterSpacing: '0.03em',
+                flex: 1, fontFamily: 'var(--font-mono)', fontSize: 13,
+                color: isDone ? 'var(--text-primary)' : 'var(--text-quaternary)',
+                fontWeight: isDone ? 700 : 500,
               }}>
                 {isDone
                   ? `${result.weight}kg × ${result.reps}`
-                  : `${exercise.target_weight}kg × ${exercise.target_reps}`
-                }
+                  : `${exercise.target_weight}kg × ${exercise.target_reps}`}
               </span>
-
-              {/* Status badge */}
               {isCurrent && (
                 <span style={{
-                  fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 700,
-                  color: 'rgba(0, 255, 240, 0.8)', letterSpacing: '0.1em',
-                  background: 'rgba(0, 255, 240, 0.1)',
-                  padding: '1px 5px', borderRadius: 2,
-                  animation: 'statusBlink 1.5s step-end infinite',
+                  fontSize: 10, fontWeight: 700, color: 'var(--brand-purple)',
+                  background: 'rgba(94,92,230,.1)',
+                  padding: '2px 6px', borderRadius: 4,
                 }}>
                   NOW
-                </span>
-              )}
-              {isPending && i === 0 && !isDone && (
-                <span style={{
-                  fontFamily: 'var(--font-mono)', fontSize: 8,
-                  color: 'rgba(255,255,255,0.2)', letterSpacing: '0.1em',
-                }}>
-                  STANDBY
                 </span>
               )}
             </div>

@@ -1,6 +1,5 @@
 /**
- * PostureReport — Jarvis HUD posture analysis with SVG arc gauge,
- * severity cards with deviation meters, and diagnostic readouts.
+ * PostureReport — Apple Fitness+ style posture analysis
  */
 import type { PostureReport as PostureReportData } from '../cv/postureScanner';
 
@@ -10,48 +9,36 @@ interface PostureReportProps {
 }
 
 const SEVERITY_COLOR: Record<string, string> = {
-  ok: '#00ff80', mild: '#ffcc00', moderate: '#ff8800', severe: '#ff3333',
+  ok: '#34c759', mild: '#ff9500', moderate: '#ff9500', severe: '#ff3b30',
 };
 
 const SEVERITY_LABEL: Record<string, string> = {
-  ok: 'NORMAL', mild: 'MILD', moderate: 'MODERATE', severe: 'ALERT',
+  ok: 'Normal', mild: 'Mild', moderate: 'Moderate', severe: 'Alert',
 };
 
 function ScoreGauge({ score }: { score: number }) {
-  const radius = 52;
-  const stroke = 4;
-  const circumference = 2 * Math.PI * radius;
-  const progress = score / 100;
-  const offset = circumference * (1 - progress);
-  const color = score >= 80 ? '#00ff80' : score >= 60 ? '#ffcc00' : '#ff4040';
+  const r = 52;
+  const circ = 2 * Math.PI * r;
+  const offset = circ * (1 - score / 100);
+  const color = score >= 80 ? '#34c759' : score >= 60 ? '#ff9500' : '#ff3b30';
 
   return (
-    <div style={{ textAlign: 'center', padding: '8px 0' }}>
+    <div style={{ textAlign: 'center', padding: '12px 0' }}>
       <svg width={130} height={130} viewBox="0 0 130 130">
-        {/* Background arc */}
-        <circle cx="65" cy="65" r={radius} fill="none"
-          stroke="rgba(255,255,255,0.06)" strokeWidth={stroke} />
-        {/* Score arc */}
-        <circle cx="65" cy="65" r={radius} fill="none"
-          stroke={color} strokeWidth={stroke}
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
+        <circle cx="65" cy="65" r={r} fill="none" stroke="#f2f2f7" strokeWidth={5} />
+        <circle cx="65" cy="65" r={r} fill="none"
+          stroke={color} strokeWidth={5} strokeLinecap="round"
+          strokeDasharray={circ} strokeDashoffset={offset}
           transform="rotate(-90 65 65)"
-          style={{
-            filter: `drop-shadow(0 0 6px ${color})`,
-            transition: 'stroke-dashoffset 1s ease-out',
-          }}
+          style={{ filter: `drop-shadow(0 0 6px ${color})`, transition: 'stroke-dashoffset 1s cubic-bezier(.34,1.56,.64,1)' }}
         />
-        {/* Score number */}
-        <text x="65" y="60" textAnchor="middle" dominantBaseline="central"
-          fill={color} fontFamily="var(--font-mono)" fontSize="36" fontWeight="800"
-          style={{ filter: `drop-shadow(0 0 8px ${color})` }}>
+        <text x="65" y="58" textAnchor="middle" dominantBaseline="central"
+          fill="var(--text-primary)" fontFamily="var(--font-mono)" fontSize="36" fontWeight="800">
           {score}
         </text>
         <text x="65" y="82" textAnchor="middle"
-          fill="rgba(255,255,255,0.4)" fontFamily="var(--font-mono)" fontSize="8"
-          letterSpacing="0.15em">
+          fill="var(--text-tertiary)" fontFamily="var(--font-sans)" fontSize="10" fontWeight="600"
+          letterSpacing=".05em" style={{ textTransform: 'uppercase' }}>
           POSTURE SCORE
         </text>
       </svg>
@@ -62,36 +49,24 @@ function ScoreGauge({ score }: { score: number }) {
 export function PostureReport({ report, scanning }: PostureReportProps) {
   if (scanning && !report) {
     return (
-      <div className="hud-card hud-scanline" style={{
-        padding: 24, textAlign: 'center',
+      <div style={{
+        background: 'var(--bg-card)', borderRadius: 'var(--radius-card)',
+        boxShadow: 'var(--shadow-card)', padding: 28, textAlign: 'center',
       }}>
-        {/* Dual-arc spinner */}
         <div style={{ position: 'relative', width: 48, height: 48, margin: '0 auto 16px' }}>
           <div style={{
             position: 'absolute', inset: 0,
-            border: '2px solid transparent',
-            borderTopColor: 'rgba(0, 255, 240, 0.6)',
-            borderRadius: '50%',
-            animation: 'spin 1s linear infinite',
+            border: '3px solid transparent', borderTopColor: 'var(--brand-purple)',
+            borderRadius: '50%', animation: 'spin 1s linear infinite',
           }} />
           <div style={{
-            position: 'absolute', inset: 6,
-            border: '2px solid transparent',
-            borderBottomColor: 'rgba(0, 255, 240, 0.3)',
-            borderRadius: '50%',
-            animation: 'spin 1.5s linear infinite reverse',
+            position: 'absolute', inset: 8,
+            border: '2px solid transparent', borderBottomColor: 'var(--brand-violet)',
+            borderRadius: '50%', animation: 'spin 1.5s linear infinite reverse',
           }} />
         </div>
-        <div style={{
-          fontFamily: 'var(--font-mono)', fontSize: 11,
-          color: 'rgba(0, 255, 240, 0.6)', letterSpacing: '0.1em',
-          animation: 'pulse 1.5s ease-in-out infinite',
-        }}>
-          ANALYZING...
-        </div>
-        <div style={{
-          fontSize: 11, color: 'var(--color-text-dim)', marginTop: 6,
-        }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>Analyzing...</div>
+        <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
           请保持正面站立，双手自然下垂
         </div>
       </div>
@@ -100,69 +75,60 @@ export function PostureReport({ report, scanning }: PostureReportProps) {
 
   if (!report) {
     return (
-      <div className="hud-card" style={{
-        padding: 16, fontFamily: 'var(--font-mono)', fontSize: 11,
-        color: 'var(--color-text-dim)', letterSpacing: '0.03em',
+      <div style={{
+        background: 'var(--bg-card)', borderRadius: 'var(--radius-card)',
+        boxShadow: 'var(--shadow-card)', padding: 18,
+        fontSize: 13, color: 'var(--text-secondary)',
       }}>
-        <span style={{ color: 'rgba(0, 255, 240, 0.5)' }}>&gt;</span> SWITCH TO POSTURE MODE TO BEGIN SCAN
+        切换到体态评估模式，面对摄像头站立即可开始扫描
       </div>
     );
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {/* Score gauge */}
-      <div className="hud-card" style={{
-        padding: 8, animation: 'fadeInScale 0.6s ease-out',
+      <div style={{
+        background: 'var(--bg-card)', borderRadius: 'var(--radius-card)',
+        boxShadow: 'var(--shadow-card)', padding: 8,
+        animation: 'scaleIn 0.5s var(--spring) both',
       }}>
         <ScoreGauge score={report.overallScore} />
       </div>
 
       {/* Issues */}
       {report.issues.length === 0 ? (
-        <div className="hud-card" style={{
-          padding: 14, textAlign: 'center',
-          fontFamily: 'var(--font-mono)', fontSize: 11,
-          color: '#00ff80', letterSpacing: '0.08em',
-          textShadow: '0 0 6px rgba(0,255,128,0.3)',
+        <div style={{
+          background: 'var(--bg-card)', borderRadius: 'var(--radius-card)',
+          boxShadow: 'var(--shadow-card)', padding: 16, textAlign: 'center',
+          fontSize: 13, fontWeight: 600, color: '#34c759',
         }}>
-          ALL CLEAR — NO ISSUES DETECTED
+          All Clear — No Issues Detected
         </div>
       ) : (
         report.issues.map((issue, i) => (
-          <div key={i} className="hud-card hud-stagger" style={{
-            padding: '10px 12px',
-            borderLeftColor: `${SEVERITY_COLOR[issue.severity]}40`,
+          <div key={i} className="stagger" style={{
+            background: 'var(--bg-card)', borderRadius: 'var(--radius-card)',
+            boxShadow: 'var(--shadow-card)', padding: '12px 16px',
+            borderLeft: `3px solid ${SEVERITY_COLOR[issue.severity]}`,
           }}>
-            <div style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              marginBottom: 6,
-            }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>{issue.description}</span>
               <span style={{
-                fontSize: 12, fontWeight: 600, color: 'var(--color-text)',
-              }}>
-                {issue.description}
-              </span>
-              <span style={{
-                fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.08em',
+                fontSize: 10, fontWeight: 700,
                 color: SEVERITY_COLOR[issue.severity],
-                background: `${SEVERITY_COLOR[issue.severity]}15`,
-                padding: '2px 6px', borderRadius: 3,
+                background: `${SEVERITY_COLOR[issue.severity]}18`,
+                padding: '3px 8px', borderRadius: 'var(--radius-badge)',
               }}>
                 {SEVERITY_LABEL[issue.severity]}
               </span>
             </div>
-            {/* Deviation meter */}
-            <div style={{
-              height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.04)',
-              overflow: 'hidden',
-            }}>
+            <div style={{ height: 4, borderRadius: 4, background: 'var(--border-separator)', overflow: 'hidden' }}>
               <div style={{
-                height: '100%', borderRadius: 2,
+                height: '100%', borderRadius: 4,
                 width: `${Math.min(100, issue.value * 5)}%`,
                 background: SEVERITY_COLOR[issue.severity],
-                transition: 'width 0.6s ease-out',
-                boxShadow: `0 0 4px ${SEVERITY_COLOR[issue.severity]}60`,
+                transition: 'width .6s var(--spring)',
               }} />
             </div>
           </div>
@@ -170,32 +136,33 @@ export function PostureReport({ report, scanning }: PostureReportProps) {
       )}
 
       {/* Measurements */}
-      <div className="hud-card" style={{ padding: 12 }}>
-        <div style={{
-          fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.08em',
-          color: 'var(--color-text-dim)', marginBottom: 8,
-        }}>
-          MEASUREMENTS
+      <div style={{
+        background: 'var(--bg-card)', borderRadius: 'var(--radius-card)',
+        boxShadow: 'var(--shadow-card)', padding: 16,
+      }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>
+          Measurements
         </div>
-        <div style={{
-          display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10,
-        }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           {[
-            { label: 'SHOULDER', value: `${report.shoulderTiltDeg}°`, warn: Math.abs(report.shoulderTiltDeg) > 5 },
-            { label: 'PELVIS', value: `${report.pelvisTiltDeg}°`, warn: Math.abs(report.pelvisTiltDeg) > 10 },
-            { label: 'HEAD FWD', value: `${(report.headForwardRatio * 100).toFixed(0)}%`, warn: report.headForwardRatio > 0.15 },
-            { label: 'SPINE', value: `${(report.spineDeviationRatio * 100).toFixed(0)}%`, warn: report.spineDeviationRatio > 0.05 },
+            { label: 'Shoulder', value: `${report.shoulderTiltDeg}°`, warn: Math.abs(report.shoulderTiltDeg) > 5 },
+            { label: 'Pelvis', value: `${report.pelvisTiltDeg}°`, warn: Math.abs(report.pelvisTiltDeg) > 10 },
+            { label: 'Head Fwd', value: `${(report.headForwardRatio * 100).toFixed(0)}%`, warn: report.headForwardRatio > 0.15 },
+            { label: 'Spine', value: `${(report.spineDeviationRatio * 100).toFixed(0)}%`, warn: report.spineDeviationRatio > 0.05 },
           ].map(({ label, value, warn }) => (
-            <div key={label} style={{ textAlign: 'center' }}>
+            <div key={label} style={{
+              textAlign: 'center', padding: '10px 0',
+              background: 'var(--bg-subtle)', borderRadius: 'var(--radius-mini)',
+            }}>
+              <div style={{ fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 600, letterSpacing: '.05em', textTransform: 'uppercase' }}>
+                {label}
+              </div>
               <div style={{
-                fontFamily: 'var(--font-mono)', fontSize: 8,
-                color: 'var(--color-text-dim)', letterSpacing: '0.08em',
-              }}>{label}</div>
-              <div className="hud-readout" style={{
-                fontSize: 16, fontWeight: 700, marginTop: 2,
-                color: warn ? 'var(--color-warning)' : 'var(--color-text)',
-                animation: warn ? 'pulse 2s ease-in-out infinite' : 'none',
-              }}>{value}</div>
+                fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 800, marginTop: 3,
+                color: warn ? '#ff9500' : 'var(--text-primary)',
+              }}>
+                {value}
+              </div>
             </div>
           ))}
         </div>
