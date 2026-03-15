@@ -131,7 +131,7 @@ export function Sidebar() {
     }}>
       {/* ── Sticky Header ────────────────────────────────── */}
       <div style={{
-        padding: '18px 20px 14px',
+        padding: '20px 20px 16px',
         background: 'linear-gradient(180deg, rgba(255,255,255,.9), rgba(255,255,255,.5))',
         backdropFilter: 'blur(20px)',
         position: 'sticky', top: 0, zIndex: 10,
@@ -159,7 +159,7 @@ export function Sidebar() {
       </div>
 
       {/* ── Content ──────────────────────────────────────── */}
-      <div style={{ padding: '4px 16px 100px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ padding: '16px 16px 100px', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
         {/* ═══ IDLE ═══ */}
         {mode === 'idle' && (
