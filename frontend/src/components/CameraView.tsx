@@ -55,6 +55,12 @@ export function CameraView() {
         onAudio: (pcm) => audioEngine.playPCM(pcm),
       });
 
+      // Tell backend the actual mic sample rate
+      adkClient.sendJSON({
+        type: 'audio_config',
+        sample_rate: audioEngine.sampleRate,
+      });
+
       // Initialize MediaPipe (async, non-blocking)
       initMediaPipe().then(() => {
         mediaPipeReady = true;

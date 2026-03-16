@@ -127,7 +127,14 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                     "text": part.text,
                                 })
 
-                    for fr in (event.get_function_responses() or []):
+                    fn_responses = event.get_function_responses() or []
+                    fn_calls = event.get_function_calls() or []
+                    if fn_responses:
+                        print(f"[WS] Function responses: {[fr.name for fr in fn_responses]}")
+                    if fn_calls:
+                        print(f"[WS] Function calls: {[fc.name for fc in fn_calls]}")
+
+                    for fr in fn_responses:
                         if fr.name == "generate_training_plan" and fr.response:
                             plan_data = fr.response.get("result", fr.response)
                             await websocket.send_json({
@@ -210,23 +217,29 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
 
     event_task = asyncio.create_task(forward_events())
 
+    # Audio sample rate from browser (may be 16k, 44.1k, or 48k)
+    audio_sample_rate = 16000
+
     try:
         while True:
             data = await websocket.receive()
 
             if "bytes" in data and data["bytes"]:
                 # Audio binary from browser mic → Gemini Live
-                # Don't specify rate — browser may use 44.1k/48k, not 16k.
-                # Gemini Live API auto-resamples any PCM input.
                 live_queue.send_realtime(types.Blob(
-                    mime_type="audio/pcm",
+                    mime_type=f"audio/pcm;rate={audio_sample_rate}",
                     data=data["bytes"],
                 ))
 
             elif "text" in data and data["text"]:
                 msg = json.loads(data["text"])
 
-                if msg["type"] == "text":
+                if msg["type"] == "audio_config":
+                    # Browser reports actual mic sample rate
+                    audio_sample_rate = int(msg.get("sample_rate", 16000))
+                    print(f"[WS] Audio sample rate: {audio_sample_rate}Hz")
+
+                elif msg["type"] == "text":
                     # Text input → send as turn-by-turn content
                     live_queue.send_content(types.Content(
                         role="user",

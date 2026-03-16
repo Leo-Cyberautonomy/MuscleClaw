@@ -104,7 +104,7 @@ class ADKClient {
     this.sendJSON({ type: 'text', text });
   }
 
-  private sendJSON(obj: any) {
+  sendJSON(obj: any) {
     if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(obj));
   }
 

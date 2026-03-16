@@ -42,7 +42,7 @@ export function BodyPanel({ landmarks, canvasWidth, canvasHeight }: BodyPanelPro
   const mode = useAppStore((s) => s.mode);
   const bodyProfile = useAppStore((s) => s.bodyProfile);
 
-  if (mode !== 'body_scan' || !landmarks || canvasWidth === 0) return null;
+  if ((mode !== 'body_scan' && mode !== 'dashboard') || !landmarks || canvasWidth === 0) return null;
 
   return (
     <>
