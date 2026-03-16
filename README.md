@@ -111,6 +111,50 @@ npm run dev
 
 Open http://localhost:5173 — allow camera and microphone access.
 
+### Reproducible Testing
+
+The repo includes two repeatable test paths: a local smoke test and a hosted end-to-end WebSocket test.
+
+#### 1. Local smoke test
+
+Start the backend and frontend with the commands above, then verify:
+
+```bash
+curl http://localhost:8080/health
+curl http://localhost:8080/api/exercises
+```
+
+Expected results:
+
+- `/health` returns `{"status":"ok","agent":"muscleclaw"}`
+- `/api/exercises` returns a JSON exercise list
+- Opening `http://localhost:5173` prompts for camera and microphone access
+- Saying "show my body profile" triggers a spoken reply and opens the dashboard
+
+#### 2. Hosted end-to-end test
+
+This test hits the public Cloud Run deployment and verifies WebSocket connection, audio replies, tool routing, and UI command delivery.
+
+```bash
+cd backend
+uv pip install -r requirements.txt
+python e2e_test.py
+```
+
+The script reports pass/fail checks for connection stability, voice reply flow, training-plan generation, body-profile lookup, training-set recording, and preference updates.
+
+#### 3. Maintainer-only Firestore persistence check
+
+If you have `gcloud` access to the project, run the extended test suite:
+
+```bash
+cd backend
+uv pip install -r requirements.txt
+python test_e2e.py
+```
+
+This version additionally validates that user state was persisted to Google Cloud Firestore.
+
 ### Deploy to Cloud Run
 
 ```bash
@@ -122,6 +166,16 @@ gcloud run deploy muscleclaw \
   --memory 1Gi \
   --port 8080
 ```
+
+### Automated Cloud Deployment
+
+You can deploy the app to Google Cloud Run from the repo root with the included script:
+
+```bash
+PROJECT_ID=your-gcp-project GOOGLE_API_KEY=your-key ./deploy/deploy-cloud-run.sh
+```
+
+The script enables the required Google Cloud services and performs a source-based Cloud Run deployment with the required environment variables.
 
 ### Reset Demo Data
 
