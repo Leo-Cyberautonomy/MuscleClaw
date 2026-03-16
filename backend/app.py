@@ -102,13 +102,16 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
 
     # Push initial user data to frontend (data layer — MECE)
     # Read directly from Firestore because create_session() starts empty
-    # (user state is only merged by ADK internally during get_session)
     try:
         user_state = await session_service._get_user_state("muscleclaw", user_id)
+        print(f"[WS] User state keys: {list(user_state.keys())}")
         for key, val in user_state.items():
-            if val:
+            if val and key != "_update_time":
                 await websocket.send_json({"type": "state_sync", "key": f"user:{key}", "data": val})
+                print(f"[WS] Pushed user:{key}")
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f"[WS] Failed to push initial state: {e}")
 
     # Background task: consume events from run_live → forward to WebSocket
@@ -138,8 +141,10 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                     "text": part.text,
                                 })
 
-                    # Data layer: push state changes to frontend (100% reliable)
-                    # In Live mode, state_delta may or may not be available
+                    # Data layer: push state changes to frontend
+                    if event.actions:
+                        if event.actions.state_delta:
+                            print(f"[WS] state_delta keys: {list(event.actions.state_delta.keys())}")
                     if event.actions and event.actions.state_delta:
                         for key, value in event.actions.state_delta.items():
                             if key.startswith("user:") or key == "current_plan":
@@ -149,8 +154,11 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                     "data": value,
                                 })
 
-                    # Fallback: check function responses and push tool results directly
-                    for fr in (event.get_function_responses() or []):
+                    # Fallback: check function responses and push tool results
+                    fn_responses = event.get_function_responses() or []
+                    if fn_responses:
+                        print(f"[WS] fn_responses: {[(fr.name, bool(fr.response)) for fr in fn_responses]}")
+                    for fr in fn_responses:
                         if fr.name == "generate_training_plan" and fr.response:
                             plan_data = fr.response.get("result", fr.response)
                             await websocket.send_json({
