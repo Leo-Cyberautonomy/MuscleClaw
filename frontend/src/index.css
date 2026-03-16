@@ -131,6 +131,11 @@ body {
   50% { box-shadow: 0 0 16px rgba(94,92,230,0.25); }
 }
 
+@keyframes ripple {
+  0% { width: 10px; height: 10px; opacity: 1; }
+  100% { width: 80px; height: 80px; opacity: 0; }
+}
+
 /* ── Stagger entrance delays ───────────────────────────────── */
 
 .stagger { animation: fadeUp 0.4s var(--spring) both; }

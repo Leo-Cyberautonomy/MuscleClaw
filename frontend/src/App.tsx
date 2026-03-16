@@ -6,6 +6,7 @@ import { TranscriptBar } from './components/TranscriptBar';
 import { ChatInput } from './components/ChatInput';
 import { ControlBar } from './components/ControlBar';
 import { SideButton } from './components/SideButton';
+import { AirCursor } from './components/AirCursor';
 
 export function App() {
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
@@ -36,6 +37,7 @@ export function App() {
       </div>
 
       {safetyAlertActive && <SafetyAlert />}
+      <AirCursor />
     </div>
   );
 }
