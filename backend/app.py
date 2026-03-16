@@ -101,17 +101,19 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     })
 
     # Push initial user data to frontend (data layer — MECE)
-    # Read directly from Firestore because create_session() starts empty
+    # Re-read session with merged user state from Firestore
     try:
-        user_state = await session_service._get_user_state("muscleclaw", user_id)
-        print(f"[WS] User state keys: {list(user_state.keys())}")
-        for key, val in user_state.items():
-            if val and key != "_update_time":
-                await websocket.send_json({"type": "state_sync", "key": f"user:{key}", "data": val})
-                print(f"[WS] Pushed user:{key}")
+        full_session = await session_service.get_session(
+            app_name="muscleclaw", user_id=user_id, session_id=session.id
+        )
+        if full_session:
+            for key in ["user:body_profile", "user:preferences", "user:training_history", "user:posture_report"]:
+                val = full_session.state.get(key)
+                if val:
+                    await websocket.send_json({"type": "state_sync", "key": key, "data": val})
+                    print(f"[WS] Initial push: {key}")
     except Exception as e:
-        traceback.print_exc()
-        print(f"[WS] Failed to push initial state: {e}")
+        print(f"[WS] Initial state push failed: {e}")
 
     # Background task: consume events from run_live → forward to WebSocket
     # With auto-retry on transient Gemini API errors (1008, etc.)
