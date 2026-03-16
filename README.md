@@ -1,49 +1,40 @@
 # MuscleClaw — AI Fitness Coach
 
-> Like Jarvis, but for the gym. Real-time AI fitness assistant with camera vision, voice interaction, gesture control, and AR overlays.
+> Like Jarvis, but for the gym. Real-time AI fitness coach with camera vision, voice interaction, gesture control, and AR overlays.
 
-Built for the **Gemini Live Agent Challenge** using Google ADK + Gemini Live API (bidi-streaming audio/video).
+Built for the **Gemini Live Agent Challenge** using Google ADK + Gemini Live API.
+
+**Live Demo:** https://muscleclaw-1058434722594.us-central1.run.app
+
+![Architecture](docs/architecture.png)
 
 ## What it does
 
-MuscleClaw is a real-time AI fitness coach that:
-- **Sees you** — Camera + MediaPipe (30fps pose detection) + Gemini vision (1fps scene understanding)
-- **Talks to you** — Natural voice conversation with personality modes (professional, gentle, trash-talk)
-- **Counts your reps** — Automatic rep counting with ROM validation using angle zero-crossing detection
+MuscleClaw is a real-time AI fitness coach that sees you, talks to you, and coaches you through your workout:
+
+- **Sees you** — Camera + MediaPipe pose detection (33 landmarks at 30fps)
+- **Talks to you** — Natural voice conversation with 3 personality modes
+- **Counts your reps** — Automatic rep counting with ROM validation
 - **Corrects your form** — Real-time joint angle analysis and symmetry checking
-- **Keeps you safe** — Detects barbell stalls and triggers emergency countdown alerts
-- **Remembers you** — Persistent training history, body profile, and strength data across sessions
-- **Understands gestures** — Thumbs up to confirm, OK to acknowledge, hands-free control
+- **Keeps you safe** — Detects barbell stalls and triggers emergency countdown
+- **Remembers you** — Persistent training history, body profile, strength data
+- **Understands gestures** — Thumbs up, OK gesture, Air Touch (finger pointing as cursor)
+- **Generates plans** — AI-generated training plans based on recovery status
+- **Enhances photos** — Showcase mode with AI muscle enhancement (before/after)
 
-## Architecture
+## Dual-Model Architecture
 
-**Dual-Vision Fusion** — two visual processing systems working together:
+MuscleClaw uses two Gemini models running in parallel for reliability and consistency:
 
-```
-Browser (30fps)                         Cloud Run
-┌──────────────────┐    WebSocket    ┌──────────────────────┐
-│ Camera 1280×720  │────────────────→│ FastAPI               │
-│ MediaPipe Pose   │  audio (16kHz)  │   ↓                   │
-│ MediaPipe Hand   │  video (1fps)   │ ADK Runner             │
-│ CV Engine:       │  CV events      │   ↓                   │
-│  · Rep Counter   │←────────────────│ Gemini Live API      │
-│  · Safety Monitor│  audio (24kHz)  │   · Voice conversation│
-│  · Gestures      │  UI commands    │   · Vision understanding│
-│ Canvas 2D AR     │  transcripts    │   · Tool calling      │
-│ Web Audio API    │                 │ SessionService (state) │
-└──────────────────┘                 └──────────────────────┘
-```
+| Model | Role | Reliability |
+|-------|------|-------------|
+| **gemini-2.5-flash-native-audio-preview** | Voice conversation, personality, real-time audio I/O | Natural voice |
+| **gemini-2.5-flash** (text, stable) | Tool calling via ToolRouter with `mode=ANY` | ~100% tool execution |
 
-### Why Dual-Vision?
-
-| Feature | MediaPipe (30fps, browser) | Gemini (1fps, cloud) |
-|---------|---------------------------|---------------------|
-| Rep counting | ✅ Angle zero-crossing | ❌ Too slow |
-| Form correction | ✅ Joint angle analysis | ✅ Overall assessment |
-| Safety detection | ✅ Barbell stall detect | ✅ Confirm + respond |
-| Gesture control | ✅ Hand landmark classification | ❌ Too slow |
-| Scene understanding | ❌ No semantic model | ✅ "You're using a barbell" |
-| Training advice | ❌ No reasoning | ✅ Full conversation |
+The **ToolRouter** analyzes every user message, decides which tool to call, executes it directly, and injects the `[TOOL_RESULT]` back into the voice model's context. This ensures:
+- Voice output always matches UI data (single source of truth)
+- Tool calls execute reliably regardless of audio model behavior
+- Frontend data updates are instant and consistent
 
 ## Tech Stack
 
@@ -51,33 +42,56 @@ Browser (30fps)                         Cloud Run
 |-------|-----------|
 | Frontend | React 19 + TypeScript + Vite |
 | Computer Vision | @mediapipe/tasks-vision (Pose 33pt + Hand 21pt) |
-| AR Rendering | Canvas 2D + CSS backdrop-filter |
-| Audio | Web Audio API (PCM 16kHz capture, 24kHz playback) |
-| State | Zustand |
-| AI Framework | Google ADK |
-| AI Model | Gemini 2.5 Flash Native Audio (Live API bidi-streaming) |
+| AR Rendering | Canvas 2D + Jarvis HUD cards (CSS + inline SVG) |
+| Audio | Web Audio API (AudioWorklet PCM capture + playback) |
+| State | Zustand (4 stores) |
+| AI Framework | Google ADK (Agent Development Kit) |
+| Voice Model | Gemini 2.5 Flash Native Audio (Live API bidi-streaming) |
+| Tool Model | Gemini 2.5 Flash (text, forced function calling) |
+| Image Gen | Gemini 2.0 Flash Exp (Showcase muscle enhancement) |
 | Backend | FastAPI + WebSocket |
+| Persistence | Google Cloud Firestore |
 | Deployment | Google Cloud Run |
 
 ## Features
 
-### P0 — Core
-- 🗣️ **Jarvis Voice Conversation** — Natural voice chat with personality modes
-- 💪 **Real-time Rep Counting** — Angle-based detection with ROM validation
-- 🔒 **Safety Guardian** — Barbell stall detection with 10s emergency countdown
-- 📊 **Persistent Memory** — Training history, body profile, strength records
+### Core
+- **Jarvis Voice Coach** — Natural voice conversation with personality modes (Trash Talk / Gentle / Professional)
+- **Real-time Rep Counting** — Angle-based detection with ROM validation
+- **Safety Guardian** — Barbell stall detection with emergency countdown + contact call
+- **Persistent Memory** — Training history, body profile, preferences in Firestore
 
-### P1 — Enhanced
-- 🦴 **AR Skeleton Overlay** — Glow effect skeleton on camera feed
-- 📐 **Joint Angle Display** — Real-time angle arcs on elbows/knees
-- 👍 **Gesture Control** — Thumbs up/OK for hands-free interaction
-- 📋 **Training Plan Generation** — AI-generated plans based on recovery status
+### AR & Interaction
+- **Jarvis HUD Body Cards** — Holographic floating cards anchored to body landmarks with glow effects, corner brackets, scan lines
+- **Air Touch** — Point your finger at the screen as a cursor, dwell-click to interact
+- **Side Button** — Quick sidebar toggle from camera view
+- **Gesture Control** — Thumbs up / OK for hands-free interaction
+
+### AI-Powered
+- **Training Plan Generation** — AI analyzes recovery status, recommends exercises, generates plans with scientific rationale
+- **Showcase Mode** — AI muscle enhancement: capture a photo, Gemini generates a muscular version (before/after)
+- **Posture Analysis** — Shoulder tilt, pelvic tilt, forward head detection with improvement suggestions
+
+### Data & Visualization
+- **Apple Fitness+ Dashboard** — Activity rings, PR records, training heatmap, form quality metrics
+- **Weight Progression Curves** — SVG line charts per exercise
+- **Training Calendar** — 30-day activity heatmap
+
+## Personality Modes
+
+| Mode | Voice | Style | Example |
+|------|-------|-------|---------|
+| **Trash Talk** (default) | Charon | Roasts you then coaches you | "Nah that doesn't count! My grandma extends further!" |
+| Gentle | Kore | Warm encouragement | "Great form! Just extend a tiny bit more..." |
+| Professional | Puck | Clinical data-driven | "Set 3 complete. Rest 120 seconds." |
+
+Every roast is followed by specific professional coaching advice. Safety alerts override personality instantly.
 
 ## Getting Started
 
 ### Prerequisites
 - Node.js 22+
-- Python 3.12+
+- Python 3.12+ (uv recommended)
 - Google API Key with Gemini access
 
 ### Local Development
@@ -85,10 +99,9 @@ Browser (30fps)                         Cloud Run
 ```bash
 # Backend
 cd backend
-cp .env.example .env  # Add your GOOGLE_API_KEY
-python -m venv .venv
-pip install -r requirements.txt
-uvicorn app:app --reload --port 8000
+cp .env.example .env  # Add GOOGLE_API_KEY
+uv venv && uv pip install -r requirements.txt
+uvicorn app:app --reload --port 8080
 
 # Frontend (separate terminal)
 cd frontend
@@ -98,13 +111,6 @@ npm run dev
 
 Open http://localhost:5173 — allow camera and microphone access.
 
-### Docker
-
-```bash
-docker build -t muscleclaw .
-docker run -p 8080:8080 -e GOOGLE_API_KEY=your-key muscleclaw
-```
-
 ### Deploy to Cloud Run
 
 ```bash
@@ -112,31 +118,26 @@ gcloud run deploy muscleclaw \
   --source . \
   --region us-central1 \
   --allow-unauthenticated \
-  --set-env-vars "GOOGLE_API_KEY=YOUR_KEY,GOOGLE_GENAI_USE_VERTEXAI=FALSE" \
+  --set-env-vars "GOOGLE_API_KEY=YOUR_KEY,GCP_PROJECT=YOUR_PROJECT" \
   --memory 1Gi \
-  --timeout 3600 \
-  --session-affinity
+  --port 8080
 ```
 
-## Personality Modes
+### Reset Demo Data
 
-| Mode | Voice | Style |
-|------|-------|-------|
-| Professional | Puck | Clean, direct coaching cues |
-| Gentle | Kore | Encouraging, patient guidance |
-| **Trash Talk** (default) | Charon | "嗯嗯不算！手不够直你在逗我？" / "Yeah buddy! Light weight baby!" |
-
-## CV Event Protocol
-
-The frontend CV engine sends structured events to the backend only when meaningful actions occur:
-
-```typescript
-{ type: "rep_complete", exercise_id: "bench_press", rep: 5, rom_degrees: 145, duration_ms: 2300 }
-{ type: "safety_alert", alert: "barbell_stall", confidence: 0.75 }
-{ type: "gesture", gesture: "thumbs_up" }
+```bash
+cd backend && python seed_data.py
 ```
 
-Gemini combines these precise CV measurements with its own 1fps visual understanding for comprehensive coaching.
+## Google Cloud Services Used
+
+| Service | Purpose |
+|---------|---------|
+| **Cloud Run** | Hosts the full application (frontend + backend) |
+| **Firestore** | Persistent user data (body profile, training history, preferences) |
+| **Gemini Live API** | Real-time bidi audio streaming for voice conversation |
+| **Gemini Flash** | Reliable tool calling via ToolRouter |
+| **Gemini Flash Exp** | Image generation for Showcase mode |
 
 ## License
 

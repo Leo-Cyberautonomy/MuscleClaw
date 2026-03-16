@@ -300,7 +300,7 @@ export function CameraView() {
           background: connected ? '#00ff80' : '#ff4040',
           boxShadow: connected ? '0 0 6px #00ff80' : '0 0 6px #ff4040',
         }} />
-        {mode === 'idle' ? 'MuscleClaw' : mode.replace('_', ' ').toUpperCase()}
+        {!mode || mode === 'idle' ? 'MuscleClaw' : mode.replace('_', ' ').toUpperCase()}
       </div>
     </div>
   );
