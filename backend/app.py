@@ -101,17 +101,22 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     })
 
     # Push initial user data to frontend (data layer — MECE)
-    # Re-read session with merged user state from Firestore
+    # Read user state directly from Firestore (not via session which is empty)
     try:
-        full_session = await session_service.get_session(
-            app_name="muscleclaw", user_id=user_id, session_id=session.id
-        )
-        if full_session:
-            for key in ["user:body_profile", "user:preferences", "user:training_history", "user:posture_report"]:
-                val = full_session.state.get(key)
-                if val:
-                    await websocket.send_json({"type": "state_sync", "key": key, "data": val})
-                    print(f"[WS] Initial push: {key}")
+        from google.cloud import firestore as firestore_lib
+        db = firestore_lib.AsyncClient(project="muscleclaw")
+        doc_ref = db.collection("apps").document("muscleclaw") \
+            .collection("users").document(user_id) \
+            .collection("meta").document("user_state")
+        doc = await doc_ref.get()
+        if doc.exists:
+            user_data = doc.to_dict() or {}
+            for key, val in user_data.items():
+                if val and key not in ("_update_time",):
+                    await websocket.send_json({"type": "state_sync", "key": f"user:{key}", "data": val})
+                    print(f"[WS] Initial push: user:{key}")
+        else:
+            print(f"[WS] No user state in Firestore for {user_id[:12]}")
     except Exception as e:
         print(f"[WS] Initial state push failed: {e}")
 
