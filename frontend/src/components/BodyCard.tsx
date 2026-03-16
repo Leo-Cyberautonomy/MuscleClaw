@@ -1,6 +1,7 @@
 /**
- * BodyCard — a single frosted-glass card showing body part data.
- * Designed to float over the camera view, connected to body anchors.
+ * BodyCard — frosted-glass card floating over camera view.
+ * Connected to body landmark anchor point.
+ * Per acceptance criteria 1.4-1.6.
  */
 interface BodyCardProps {
   part: string;
@@ -9,24 +10,25 @@ interface BodyCardProps {
   maxWeight: number;
   recoveryStatus: 'recovered' | 'recovering' | 'fresh';
   lastTrained: string | null;
-  /** Position in viewport pixels. */
   x: number;
   y: number;
+  /** Index for stagger animation delay */
+  index?: number;
 }
 
 const RECOVERY_COLOR: Record<string, string> = {
-  recovered: '#00ff80',
-  recovering: '#ffaa00',
-  fresh: '#00ccff',
+  recovered: '#34C759',
+  recovering: '#FF9500',
+  fresh: '#5AC8FA',
 };
 
 const RECOVERY_LABEL: Record<string, string> = {
-  recovered: '已恢复',
-  recovering: '恢复中',
-  fresh: '就绪',
+  recovered: 'Ready',
+  recovering: 'Recovering',
+  fresh: 'Fresh',
 };
 
-export function BodyCard({ label, exercise, maxWeight, recoveryStatus, lastTrained, x, y }: BodyCardProps) {
+export function BodyCard({ label, exercise, maxWeight, recoveryStatus, x, y, index = 0 }: BodyCardProps) {
   const color = RECOVERY_COLOR[recoveryStatus] ?? '#888';
 
   return (
@@ -35,26 +37,52 @@ export function BodyCard({ label, exercise, maxWeight, recoveryStatus, lastTrain
       left: x,
       top: y,
       transform: 'translate(-50%, -50%)',
-      background: 'rgba(10, 10, 20, 0.6)',
-      backdropFilter: 'blur(12px)',
-      WebkitBackdropFilter: 'blur(12px)',
-      border: `1px solid ${color}33`,
+      background: 'rgba(10, 12, 20, 0.65)',
+      backdropFilter: 'blur(16px) saturate(1.5)',
+      WebkitBackdropFilter: 'blur(16px) saturate(1.5)',
+      border: `1px solid rgba(255,255,255,0.1)`,
+      borderLeft: `3px solid ${color}`,
       borderRadius: 10,
-      padding: '8px 14px',
-      minWidth: 100,
+      padding: '10px 14px',
+      minWidth: 110,
       pointerEvents: 'none',
-      animation: 'fadeIn 0.4s ease',
+      animation: `fadeUp 0.4s ease-out ${index * 0.1}s both`,
+      boxShadow: `0 4px 16px rgba(0,0,0,0.3), 0 0 8px ${color}20`,
+      transition: 'left 0.15s ease-out, top 0.15s ease-out',
     }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color, letterSpacing: 1 }}>
+      {/* Part name */}
+      <div style={{
+        fontSize: 13, fontWeight: 700, color: '#fff',
+        letterSpacing: '.03em',
+        display: 'flex', alignItems: 'center', gap: 6,
+      }}>
+        <span style={{
+          width: 6, height: 6, borderRadius: '50%',
+          background: color, boxShadow: `0 0 6px ${color}`,
+          flexShrink: 0,
+        }} />
         {label}
       </div>
-      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>
+
+      {/* Exercise + weight */}
+      <div style={{
+        fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 4,
+        fontFamily: "'JetBrains Mono', monospace",
+      }}>
         {exercise}
-        {maxWeight > 0 && <span style={{ color: 'var(--color-text)', fontWeight: 600 }}> {maxWeight}kg</span>}
+        {maxWeight > 0 && (
+          <span style={{ color: '#fff', fontWeight: 700, marginLeft: 4 }}>
+            {maxWeight}kg
+          </span>
+        )}
       </div>
-      <div style={{ fontSize: 10, color, marginTop: 3, opacity: 0.8 }}>
+
+      {/* Recovery status */}
+      <div style={{
+        fontSize: 10, color, marginTop: 4,
+        fontWeight: 600, letterSpacing: '.04em',
+      }}>
         {RECOVERY_LABEL[recoveryStatus] ?? recoveryStatus}
-        {lastTrained && ` · ${lastTrained}`}
       </div>
     </div>
   );

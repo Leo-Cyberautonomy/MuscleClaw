@@ -1,6 +1,10 @@
 import { useAppStore } from '../stores/appStore';
 import { useEffect, useState } from 'react';
 
+/**
+ * TranscriptBar — floating subtitle bar above the chat input.
+ * Shows last 2 transcript lines, auto-fades after 5s.
+ */
 export function TranscriptBar() {
   const transcript = useAppStore((s) => s.transcript);
   const [visible, setVisible] = useState<typeof transcript>([]);
@@ -8,7 +12,7 @@ export function TranscriptBar() {
   useEffect(() => {
     if (transcript.length === 0) return;
     setVisible(transcript.slice(-2));
-    const timer = setTimeout(() => setVisible([]), 4000);
+    const timer = setTimeout(() => setVisible([]), 5000);
     return () => clearTimeout(timer);
   }, [transcript]);
 
@@ -16,18 +20,30 @@ export function TranscriptBar() {
 
   return (
     <div style={{
-      position: 'absolute', bottom: 0, left: 0, right: 0, height: 48,
-      background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)',
-      display: 'flex', alignItems: 'center', padding: '0 20px', gap: 24,
-      fontSize: 14, animation: 'fadeIn 0.2s ease',
+      position: 'absolute', bottom: 60, left: 16, right: 16,
+      background: 'rgba(0,0,0,0.55)',
+      backdropFilter: 'blur(12px)',
+      WebkitBackdropFilter: 'blur(12px)',
+      borderRadius: 12,
+      padding: '10px 16px',
+      display: 'flex', flexDirection: 'column', gap: 4,
+      animation: 'fadeUp 0.25s ease-out',
+      maxWidth: 600,
     }}>
       {visible.map((t, i) => (
-        <span key={i} style={{
-          color: t.role === 'model' ? 'var(--color-brand)' : 'var(--color-text)',
-          opacity: 0.9,
+        <div key={i} style={{
+          fontSize: 13, fontWeight: 500, lineHeight: 1.4,
+          color: t.role === 'model' ? 'rgba(100,255,218,0.9)' : 'rgba(255,255,255,0.8)',
         }}>
-          {t.role === 'model' ? 'AI: ' : 'You: '}{t.text}
-        </span>
+          <span style={{
+            fontSize: 10, fontWeight: 700, letterSpacing: '.05em',
+            color: t.role === 'model' ? 'rgba(94,92,230,0.8)' : 'rgba(255,255,255,0.4)',
+            marginRight: 6,
+          }}>
+            {t.role === 'model' ? 'AI' : 'YOU'}
+          </span>
+          {t.text}
+        </div>
       ))}
     </div>
   );

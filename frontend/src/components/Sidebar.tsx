@@ -658,6 +658,47 @@ export function Sidebar() {
                   </button>
                 ))}
               </div>
+
+              {/* Rest Timer Duration */}
+              <div style={{ marginTop: 14 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>
+                  Rest Timer
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {[60, 90, 120, 180].map(sec => (
+                    <button
+                      key={sec}
+                      onClick={() => adkClient.sendText(`Set rest timer to ${sec} seconds`)}
+                      style={{
+                        flex: 1, padding: '8px 2px', border: 'none',
+                        borderRadius: 'var(--radius-mini)',
+                        background: (preferences?.rest_timer_seconds || 120) === sec ? 'var(--brand-purple)' : 'var(--bg-subtle)',
+                        color: (preferences?.rest_timer_seconds || 120) === sec ? '#fff' : 'var(--text-primary)',
+                        fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                        transition: 'all .25s var(--spring)',
+                        fontFamily: 'var(--font-mono)',
+                      }}
+                    >
+                      {sec >= 60 ? `${sec / 60}m` : `${sec}s`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Emergency Contact */}
+              <div style={{ marginTop: 14 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>
+                  Emergency Contact
+                </div>
+                <div style={{
+                  padding: '8px 12px', borderRadius: 'var(--radius-mini)',
+                  background: 'var(--bg-subtle)', fontSize: 12,
+                  color: preferences?.emergency_contact ? 'var(--text-primary)' : 'var(--text-tertiary)',
+                  fontFamily: 'var(--font-mono)',
+                }}>
+                  {preferences?.emergency_contact || 'Not set — say "set emergency contact 139..."'}
+                </div>
+              </div>
             </div>
           )}
         </div>

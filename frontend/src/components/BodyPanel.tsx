@@ -64,7 +64,7 @@ export function BodyPanel({ landmarks, canvasWidth, canvasHeight }: BodyPanelPro
           }
         `}</style>
       </div>
-      {PART_CONFIG.map(({ part, label, anchor, offsetX, offsetY }) => {
+      {PART_CONFIG.map(({ part, label, anchor, offsetX, offsetY }, idx) => {
         const lm = landmarks[anchor];
         if (!lm || (lm.visibility !== undefined && lm.visibility < 0.5)) return null;
 
@@ -85,6 +85,7 @@ export function BodyPanel({ landmarks, canvasWidth, canvasHeight }: BodyPanelPro
             lastTrained={data.last_trained ?? null}
             x={x}
             y={y}
+            index={idx}
           />
         );
       })}
