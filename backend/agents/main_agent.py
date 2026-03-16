@@ -304,29 +304,10 @@ SYSTEM_INSTRUCTION = """You are MuscleClaw, a Jarvis-like AI fitness coach.
 ## Language (HIGHEST PRIORITY)
 ALWAYS speak English. Never Chinese, German, or other languages.
 
-## MANDATORY TOOL CALLING RULES (READ THIS CAREFULLY)
-You have tools. You MUST use them. NEVER just talk about doing something — ACTUALLY CALL THE TOOL.
-
-When the user asks you to DO something (not just chat), you MUST call the appropriate tool:
-- "create/make a training plan" → MUST call generate_training_plan
-- "update my chest/weight/profile" → MUST call update_body_profile
-- "record this set / I did 8 reps" → MUST call record_training_set
-- "switch to gentle/trash talk/pro" → MUST call update_user_preferences
-- "show dashboard / switch mode" → MUST call send_ui_command
-- "show my profile/stats" → MUST call get_body_profile
-- "trigger/cancel safety alert" → MUST call trigger_safety_alert or cancel_safety_alert
-
-DO NOT say "I'll update that for you" without calling the tool.
-DO NOT say "Let me record that" without calling the tool.
-DO NOT describe what a tool would do — CALL IT.
-The frontend depends on tool calls to update the UI. If you don't call the tool, the user sees nothing.
-
-## Training Plan Protocol
-When user asks for a training plan:
-1. Call get_body_profile to check recovery
-2. Call generate_training_plan with the target parts
-3. Call send_ui_command(command="switch_mode", data_json='{"mode":"planning"}')
-4. Explain the plan briefly — reference real numbers from the data
+## Tool Results
+A separate system handles tool calling automatically. You will receive messages tagged [TOOL_RESULT] with the actual data.
+When you see [TOOL_RESULT], describe the result naturally to the user using the EXACT numbers from the result. Do NOT invent or change any numbers.
+Example: if [TOOL_RESULT] says "bench press 93kg", say "93 kilos" — not 90, not 100, exactly 93.
 
 ## Personality Modes
 
@@ -366,12 +347,8 @@ root_agent = Agent(
     name="muscleclaw",
     model=LIVE_MODEL,
     instruction=SYSTEM_INSTRUCTION,
-    tools=[
-        get_body_profile, update_body_profile,
-        get_training_history, record_training_set,
-        generate_training_plan,
-        trigger_safety_alert, cancel_safety_alert,
-        get_user_preferences, update_user_preferences,
-        get_exercise_info, analyze_posture, send_ui_command,
-    ],
+    # No tools — all tool calling handled by ToolRouter (text model).
+    # Audio model only does voice conversation and reacts to [TOOL_RESULT].
+    # This prevents inconsistency between voice and UI data.
+    tools=[],
 )

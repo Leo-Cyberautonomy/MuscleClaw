@@ -24,12 +24,16 @@ from agents.tool_router import ToolRouter
 from config.defaults import DEFAULT_PREFERENCES
 from config.exercise_library import EXERCISE_LIBRARY
 
-# Global WebSocket registry for tools to push data directly
-# (Live mode state_delta doesn't propagate tool state changes)
-WS_REGISTRY: dict[str, WebSocket] = {}
+# Global registries for tools and routing
+WS_REGISTRY: dict[str, WebSocket] = {}  # session_id → WebSocket
+QUEUE_REGISTRY: dict[str, LiveRequestQueue] = {}  # session_id → LiveRequestQueue
 
 # Text model router for reliable tool calling
 tool_router = ToolRouter()
+
+
+def _get_live_queue(session_id: str):
+    return QUEUE_REGISTRY.get(session_id)
 
 app = FastAPI()
 
@@ -107,6 +111,16 @@ async def _route_and_execute(user_text: str, session, websocket: WebSocket):
         result = func(ctx, **clean_args)
         print(f"[Router] Executed {tool_name} → {str(result)[:80]}")
 
+        # Inject tool result into Live API so audio model speaks about REAL data
+        # This prevents audio model from inventing different numbers
+        result_text = f"[TOOL_RESULT] {tool_name} executed. Result: {result}"
+        live_queue = _get_live_queue(session.id)
+        if live_queue:
+            live_queue.send_content(types.Content(
+                role="user",
+                parts=[types.Part(text=result_text)],
+            ))
+
     except Exception as e:
         print(f"[Router] Execute error: {e}")
         import traceback as tb
@@ -141,6 +155,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
 
     # Create live request queue for bidi-streaming
     live_queue = LiveRequestQueue()
+    QUEUE_REGISTRY[session.id] = live_queue
 
     # Voice config from user preferences
     prefs = session.state.get("user:preferences", DEFAULT_PREFERENCES)
@@ -330,8 +345,9 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     finally:
         live_queue.close()
         event_task.cancel()
-        # Unregister WebSocket
+        # Unregister
         WS_REGISTRY.pop(session.id, None)
+        QUEUE_REGISTRY.pop(session.id, None)
 
 
 # Serve frontend static files in production
