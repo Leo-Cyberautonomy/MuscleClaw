@@ -30,7 +30,7 @@ export function ChatInput() {
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => e.key === 'Enter' && send()}
-        placeholder={connected ? '和 MuscleClaw 对话...' : '连接中...'}
+        placeholder={connected ? 'Talk to MuscleClaw...' : 'Connecting...'}
         disabled={!connected}
         style={{
           flex: 1, background: 'transparent', border: 'none', outline: 'none',

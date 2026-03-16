@@ -9,7 +9,7 @@ import { adkClient } from '../ws/adkClient';
 /* ── Constants ─────────────────────────────────────────────── */
 
 const PART_NAMES: Record<string, string> = {
-  chest: '胸', shoulders: '肩', back: '背', legs: '腿', core: '核心', arms: '手臂',
+  chest: 'Chest', shoulders: 'Shoulders', back: 'Back', legs: 'Legs', core: 'Core', arms: 'Arms',
 };
 
 const MUSCLE_COLOR: Record<string, string> = {
@@ -18,8 +18,8 @@ const MUSCLE_COLOR: Record<string, string> = {
 };
 
 const EXERCISE_NAMES: Record<string, string> = {
-  bench_press: '卧推', squat: '深蹲', deadlift: '硬拉',
-  ohp: '推举', barbell_row: '划船', barbell_curl: '弯举', plank: '平板支撑',
+  bench_press: 'Bench Press', squat: 'Squat', deadlift: 'Deadlift',
+  ohp: 'OHP', barbell_row: 'Row', barbell_curl: 'Curl', plank: 'Plank',
 };
 
 const MODE_TITLE: Record<string, string> = {
@@ -90,11 +90,11 @@ function getRecoveryPercent(data: any): number {
 }
 
 function getLastTrainedLabel(dateStr: string): string {
-  if (!dateStr) return '未记录';
+  if (!dateStr) return 'No record';
   const days = Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
-  if (days === 0) return '今天';
-  if (days === 1) return '昨天';
-  return `${days}天前`;
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  return `${days}d ago`;
 }
 
 /* ── Main Component ────────────────────────────────────────── */
@@ -188,13 +188,13 @@ export function Sidebar() {
                 Welcome back
               </div>
               <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                MuscleClaw AI 健身教练就绪。用下方输入框或语音开始对话。
+                Your AI fitness coach is ready. Use the input below or speak to start.
               </div>
               <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {[
-                  { label: 'Dashboard', desc: '查看各部位恢复状态' },
-                  { label: 'Training Plan', desc: '生成今日训练方案' },
-                  { label: 'Start Training', desc: '实时计数和动作纠正' },
+                  { label: 'Dashboard', desc: 'View recovery status for all muscle groups' },
+                  { label: 'Training Plan', desc: 'Generate today\'s workout' },
+                  { label: 'Start Training', desc: 'Live rep counting & form correction' },
                 ].map(({ label, desc }) => (
                   <div key={label} style={{
                     padding: '10px 14px', borderRadius: 'var(--radius-mini)',
@@ -247,18 +247,18 @@ export function Sidebar() {
                 AI Recommendation
               </div>
               <div style={{ fontSize: 18, fontWeight: 800, marginTop: 6, letterSpacing: '-.01em' }}>
-                推荐今日: {readyParts.slice(0, 2).map(p => PART_NAMES[p]).join(' + ') || '休息日'}
+                Today: {readyParts.slice(0, 2).map(p => PART_NAMES[p]).join(' + ') || 'Rest Day'}
               </div>
               <div style={{ fontSize: 13, marginTop: 5, opacity: .8, lineHeight: 1.45, fontWeight: 500 }}>
                 {readyParts.length >= 2
-                  ? `${PART_NAMES[readyParts[0]]}超量恢复完成，${PART_NAMES[readyParts[1]]}已就绪`
+                  ? `${PART_NAMES[readyParts[0]]} fully recovered. ${PART_NAMES[readyParts[1]]} ready to go.`
                   : readyParts.length === 1
-                    ? `${PART_NAMES[readyParts[0]]}已恢复，可以开始训练`
-                    : '所有部位正在恢复中，建议今天休息'}
+                    ? `${PART_NAMES[readyParts[0]]} recovered and ready to train.`
+                    : 'All muscle groups recovering. Rest day recommended.'}
               </div>
               {readyParts.length > 0 && (
                 <div
-                  onClick={() => adkClient.sendText(`帮我制定${readyParts.slice(0, 2).map(p => PART_NAMES[p]).join('和')}的训练计划`)}
+                  onClick={() => adkClient.sendText(`Create a ${readyParts.slice(0, 2).map(p => PART_NAMES[p].toLowerCase()).join(' and ')} training plan`)}
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: 6,
                     marginTop: 12, padding: '9px 18px',
@@ -272,7 +272,7 @@ export function Sidebar() {
                   <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round">
                     <polygon points="5 3 19 12 5 21 5 3" />
                   </svg>
-                  开始今日训练
+                  Start Training
                 </div>
               )}
             </div>
@@ -406,7 +406,7 @@ export function Sidebar() {
               padding: 16, boxShadow: 'var(--shadow-card)',
             }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>
-                Training Calendar
+                Training Calendar · March
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
                 {Array.from({ length: 30 }, (_, i) => {
@@ -425,9 +425,9 @@ export function Sidebar() {
                 })}
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, fontSize: 12, color: 'var(--text-tertiary)', fontWeight: 500 }}>
-                <span>本月 <b style={{ color: 'var(--text-primary)' }}>12 次</b></span>
-                <span>连续 <b style={{ color: 'var(--text-primary)' }}>3 天</b></span>
-                <span>最长 <b style={{ color: 'var(--text-primary)' }}>8 天</b></span>
+                <span>This month <b style={{ color: 'var(--text-primary)' }}>12</b></span>
+                <span>Streak <b style={{ color: 'var(--text-primary)' }}>3d</b></span>
+                <span>Best <b style={{ color: 'var(--text-primary)' }}>8d</b></span>
               </div>
             </div>
           </>
@@ -477,11 +477,11 @@ export function Sidebar() {
                 boxShadow: 'var(--shadow-card)', padding: 18,
                 animation: 'scaleIn 0.4s var(--spring) both',
               }}>
-                <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>生成训练计划</div>
+                <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>Generating Plan</div>
                 {[
-                  { key: 'review', label: '分析恢复状态' },
-                  { key: 'recommend', label: '推荐训练部位' },
-                  { key: 'generate', label: '生成详细计划' },
+                  { key: 'review', label: 'Analyzing recovery' },
+                  { key: 'recommend', label: 'Recommending muscles' },
+                  { key: 'generate', label: 'Creating plan' },
                 ].map(({ key, label }) => {
                   const isDone = (['review', 'recommend', 'generate'].indexOf(key)
                     < ['review', 'recommend', 'generate'].indexOf(workflowStep.step))
@@ -507,7 +507,7 @@ export function Sidebar() {
                         color: isActive ? 'var(--text-primary)' : isDone ? '#34c759' : 'var(--text-tertiary)',
                       }}>
                         {label}
-                        {isActive && <span style={{ color: 'var(--brand-purple)', marginLeft: 6 }}>进行中...</span>}
+                        {isActive && <span style={{ color: 'var(--brand-purple)', marginLeft: 6 }}>in progress...</span>}
                       </span>
                     </div>
                   );
@@ -520,11 +520,11 @@ export function Sidebar() {
               }}>
                 <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 14 }}>
                   {mode === 'planning'
-                    ? '说 "帮我制定训练计划" 或点击下方按钮'
-                    : '请先制定训练计划再开始训练'}
+                    ? 'Say "create a training plan" or tap below'
+                    : 'Create a training plan first to start training'}
                 </div>
                 <button
-                  onClick={() => adkClient.sendText('帮我制定训练计划')}
+                  onClick={() => adkClient.sendText('Create a training plan for me')}
                   style={{
                     width: '100%', padding: 12, border: 'none',
                     borderRadius: 'var(--radius-mini)',
@@ -535,7 +535,7 @@ export function Sidebar() {
                     transition: 'all .25s var(--spring)',
                   }}
                 >
-                  生成训练计划
+                  Generate Plan
                 </button>
               </div>
             )}
@@ -564,7 +564,7 @@ export function Sidebar() {
             transition: 'all .25s var(--spring)',
             letterSpacing: '-.01em', fontFamily: 'var(--font-sans)',
           }}>
-            开始今日训练 — {readyParts.slice(0, 2).map(p => PART_NAMES[p]).join(' + ')}
+            Start Training — {readyParts.slice(0, 2).map(p => PART_NAMES[p]).join(' + ')}
           </button>
         </div>
       )}

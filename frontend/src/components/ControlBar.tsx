@@ -23,7 +23,7 @@ export function ControlBar() {
       store.setMode(m);
       // Also tell backend about mode switch
       if (connected) {
-        adkClient.sendText(`[MODE] 切换到${m === 'dashboard' ? '仪表盘' : m === 'planning' ? '训练计划' : m === 'training' ? '训练模式' : m}`);
+        adkClient.sendText(`[MODE] Switched to ${m}`);
       }
     }
   }

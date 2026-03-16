@@ -237,11 +237,11 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                     # Show user-friendly message instead of raw API error
                     err_str = str(e)
                     if "1008" in err_str:
-                        user_msg = "AI 语音服务暂时不可用，可能是 API 调用次数达到限制。请稍后再试。"
+                        user_msg = "AI voice service temporarily unavailable. Please try again in a moment."
                     elif "1007" in err_str:
-                        user_msg = "AI 连接参数错误，请刷新页面重试。"
+                        user_msg = "Connection error. Please refresh the page."
                     else:
-                        user_msg = f"AI 连接中断，正在尝试恢复... ({type(e).__name__})"
+                        user_msg = f"Connection lost. Attempting to reconnect... ({type(e).__name__})"
                     try:
                         await websocket.send_json({
                             "type": "transcript",
