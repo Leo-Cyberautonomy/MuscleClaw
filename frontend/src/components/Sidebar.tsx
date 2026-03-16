@@ -6,6 +6,7 @@ import { PostureReport } from './PostureReport';
 import { TrainingPlanCard } from './TrainingPlanCard';
 import { adkClient } from '../ws/adkClient';
 import { WeightCurve } from './WeightCurve';
+import { ShowcaseCapture } from './ShowcaseModal';
 
 /* ── Constants ─────────────────────────────────────────────── */
 
@@ -101,6 +102,7 @@ function getLastTrainedLabel(dateStr: string): string {
 /* ── Main Component ────────────────────────────────────────── */
 
 export function Sidebar() {
+  const videoRef = (window as any).__videoRef as React.RefObject<HTMLVideoElement | null> | undefined;
   const mode = useAppStore((s) => s.mode);
   const connected = useAppStore((s) => s.connected);
   const bodyProfile = useAppStore((s) => s.bodyProfile);
@@ -599,6 +601,29 @@ export function Sidebar() {
         {/* ═══ POSTURE ═══ */}
         {mode === 'posture' && (
           <PostureReport report={postureReport} scanning={postureScanning} />
+        )}
+
+        {/* ═══ SHOWCASE ═══ */}
+        {mode === 'showcase' && (
+          <div style={{
+            background: 'var(--bg-card)', borderRadius: 'var(--radius-card)',
+            boxShadow: 'var(--shadow-card)', padding: 18,
+            animation: 'scaleIn 0.4s var(--spring) both',
+          }}>
+            <div style={{
+              fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)',
+              letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 6,
+            }}>
+              Showcase Mode
+            </div>
+            <div style={{ fontSize: 17, fontWeight: 800, marginBottom: 4 }}>
+              Muscle Enhancement
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16, lineHeight: 1.5 }}>
+              Strike a pose. AI will scan you and generate an enhanced version with serious muscle definition.
+            </div>
+            {videoRef && <ShowcaseCapture videoRef={videoRef} />}
+          </div>
         )}
 
         {/* ═══ SETTINGS ═══ */}

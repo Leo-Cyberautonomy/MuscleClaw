@@ -58,6 +58,9 @@ export function CameraView() {
   const containerRef = useRef<HTMLDivElement>(null);
   const mode = useAppStore((s) => s.mode);
   const connected = useAppStore((s) => s.connected);
+
+  // Expose videoRef globally for ShowcaseCapture
+  (window as any).__videoRef = videoRef;
   const landmarksRef = useRef<Landmark[] | null>(null);
   const canvasSizeRef = useRef({ w: 0, h: 0 });
 

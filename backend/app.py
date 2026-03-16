@@ -143,6 +143,25 @@ async def get_exercises():
     return {"data": EXERCISE_LIBRARY}
 
 
+@app.post("/api/showcase")
+async def showcase_generate(request: dict):
+    """Generate a muscular version of the user's photo.
+
+    Expects: {"photo": "<base64 JPEG>"}
+    Returns: {"image": "<base64 JPEG>"} or {"error": "..."}
+    """
+    from agents.image_gen import generate_muscle_image
+
+    photo = request.get("photo")
+    if not photo:
+        return {"error": "No photo provided"}
+
+    result = await generate_muscle_image(photo)
+    if result:
+        return {"image": result}
+    return {"error": "Image generation failed. Try again."}
+
+
 @app.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: str):
     await websocket.accept()
