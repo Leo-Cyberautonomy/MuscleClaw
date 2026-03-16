@@ -46,9 +46,9 @@ export function BodyCard({ label, exercise, maxWeight, recoveryStatus, x, y, ind
       padding: '10px 14px',
       minWidth: 110,
       pointerEvents: 'none',
+      transition: 'left 0.12s ease-out, top 0.12s ease-out',
       animation: `fadeUp 0.4s ease-out ${index * 0.1}s both`,
       boxShadow: `0 4px 16px rgba(0,0,0,0.3), 0 0 8px ${color}20`,
-      transition: 'left 0.15s ease-out, top 0.15s ease-out',
     }}>
       {/* Part name */}
       <div style={{

@@ -122,6 +122,16 @@ export function CameraView() {
         const ctx = canvas.getContext('2d')!;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+        // Always draw skeleton from last known landmarks (prevents flickering)
+        const prevLandmarks = landmarksRef.current;
+        if (prevLandmarks) {
+          ctx.save();
+          ctx.translate(canvas.width, 0);
+          ctx.scale(-1, 1);
+          drawSkeleton(ctx, prevLandmarks, canvas.width, canvas.height);
+          ctx.restore();
+        }
+
         if (mediaPipeReady && video.readyState >= 2) {
           const timestamp = performance.now();
 
@@ -129,10 +139,23 @@ export function CameraView() {
           if (frameCount % 2 === 0) {
             const landmarks = detectPose(video, timestamp);
             if (landmarks) {
+              // Lerp smoothing: blend new landmarks with previous (0.4 = responsive but smooth)
+              if (landmarksRef.current) {
+                const prev = landmarksRef.current;
+                const alpha = 0.4;
+                for (let i = 0; i < landmarks.length && i < prev.length; i++) {
+                  landmarks[i].x = prev[i].x + (landmarks[i].x - prev[i].x) * alpha;
+                  landmarks[i].y = prev[i].y + (landmarks[i].y - prev[i].y) * alpha;
+                  if (landmarks[i].z !== undefined && prev[i].z !== undefined) {
+                    landmarks[i].z = prev[i].z! + (landmarks[i].z! - prev[i].z!) * alpha;
+                  }
+                }
+              }
               landmarksRef.current = landmarks;
               usePoseStore.getState().setLandmarks(landmarks);
 
-              // Draw skeleton (mirrored to match video)
+              // Redraw skeleton with smoothed landmarks
+              ctx.clearRect(0, 0, canvas.width, canvas.height);
               ctx.save();
               ctx.translate(canvas.width, 0);
               ctx.scale(-1, 1);
