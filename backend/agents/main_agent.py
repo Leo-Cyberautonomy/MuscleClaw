@@ -169,14 +169,13 @@ def generate_training_plan(ctx: ToolContext, target_parts: str = "") -> str:
             "completed_sets": 0,
         })
 
-    # Push plan directly to frontend via WebSocket registry
-    # (Live mode state_delta doesn't propagate tool state changes)
-    plan = {"target_parts": parts, "exercises": exercises}
-    _push_to_frontend(ctx, "current_plan", plan)
         lines.append(f"  {ex_name}: 4 sets x 6 reps @ {target_w}kg (85% of {max_w}kg PR)")
 
     plan = {"target_parts": parts, "exercises": exercises}
     ctx.session.state["current_plan"] = plan
+    # Push plan directly to frontend via WebSocket registry
+    # (Live mode state_delta doesn't propagate tool state changes)
+    _push_to_frontend(ctx, "current_plan", plan)
     return "\n".join(lines)
 
 
