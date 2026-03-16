@@ -101,13 +101,15 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     })
 
     # Push initial user data to frontend (data layer — MECE)
-    for key in ["user:body_profile", "user:preferences", "user:training_history", "user:posture_report"]:
-        val = session.state.get(key)
-        if val:
-            await websocket.send_json({"type": "state_sync", "key": key, "data": val})
-    plan = session.state.get("current_plan")
-    if plan:
-        await websocket.send_json({"type": "state_sync", "key": "current_plan", "data": plan})
+    # Read directly from Firestore because create_session() starts empty
+    # (user state is only merged by ADK internally during get_session)
+    try:
+        user_state = await session_service._get_user_state("muscleclaw", user_id)
+        for key, val in user_state.items():
+            if val:
+                await websocket.send_json({"type": "state_sync", "key": f"user:{key}", "data": val})
+    except Exception as e:
+        print(f"[WS] Failed to push initial state: {e}")
 
     # Background task: consume events from run_live → forward to WebSocket
     # With auto-retry on transient Gemini API errors (1008, etc.)
@@ -137,6 +139,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                 })
 
                     # Data layer: push state changes to frontend (100% reliable)
+                    # In Live mode, state_delta may or may not be available
                     if event.actions and event.actions.state_delta:
                         for key, value in event.actions.state_delta.items():
                             if key.startswith("user:") or key == "current_plan":
@@ -145,6 +148,41 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                     "key": key,
                                     "data": value,
                                 })
+
+                    # Fallback: check function responses and push tool results directly
+                    for fr in (event.get_function_responses() or []):
+                        if fr.name == "generate_training_plan" and fr.response:
+                            plan_data = fr.response.get("result", fr.response)
+                            await websocket.send_json({
+                                "type": "state_sync",
+                                "key": "current_plan",
+                                "data": plan_data,
+                            })
+                        elif fr.name == "analyze_posture" and fr.response:
+                            report = fr.response.get("result", fr.response)
+                            await websocket.send_json({
+                                "type": "state_sync",
+                                "key": "user:posture_report",
+                                "data": report,
+                            })
+                        elif fr.name == "get_body_profile" and fr.response:
+                            await websocket.send_json({
+                                "type": "state_sync",
+                                "key": "user:body_profile",
+                                "data": fr.response,
+                            })
+                        elif fr.name == "update_body_profile" and fr.response:
+                            # Re-read full profile from session after update
+                            try:
+                                us = await session_service._get_user_state("muscleclaw", user_id)
+                                if "body_profile" in us:
+                                    await websocket.send_json({
+                                        "type": "state_sync",
+                                        "key": "user:body_profile",
+                                        "data": us["body_profile"],
+                                    })
+                            except Exception:
+                                pass
 
                     # Navigation layer: AI UI commands (supplementary)
                     for fc in (event.get_function_calls() or []):
