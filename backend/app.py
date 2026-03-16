@@ -111,6 +111,12 @@ async def _route_and_execute(user_text: str, session, websocket: WebSocket):
         result = func(ctx, **clean_args)
         print(f"[Router] Executed {tool_name} → {str(result)[:80]}")
 
+        # Auto-chain: some tools need follow-up UI commands
+        if tool_name == "generate_training_plan":
+            tools_module.send_ui_command(ctx, command="switch_mode", data_json='{"mode":"planning"}')
+        elif tool_name == "get_body_profile":
+            tools_module.send_ui_command(ctx, command="switch_mode", data_json='{"mode":"dashboard"}')
+
         # Inject tool result into Live API so audio model speaks about REAL data
         # This prevents audio model from inventing different numbers
         result_text = f"[TOOL_RESULT] {tool_name} executed. Result: {result}"
