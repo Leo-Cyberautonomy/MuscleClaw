@@ -146,78 +146,22 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                             print(f"[WS] state_delta keys: {list(event.actions.state_delta.keys())}")
                     if event.actions and event.actions.state_delta:
                         for key, value in event.actions.state_delta.items():
-                            if key.startswith("user:") or key == "current_plan" or key.startswith("temp:"):
+                            # current_plan, user:body_profile etc. are pushed directly by tools
+                            # via _push_to_frontend. Only forward keys NOT handled by direct push.
+                            # Skip current_plan to avoid null override race condition.
+                            if key == "current_plan":
+                                continue
+                            if key.startswith("user:") or key.startswith("temp:"):
                                 await websocket.send_json({
                                     "type": "state_sync",
                                     "key": key,
                                     "data": value,
                                 })
 
-                    # Fallback: check function responses and push tool results
-                    fn_responses = event.get_function_responses() or []
-                    if fn_responses:
-                        print(f"[WS] fn_responses: {[(fr.name, bool(fr.response)) for fr in fn_responses]}")
-                    for fr in fn_responses:
-                        if fr.name == "generate_training_plan" and fr.response:
-                            plan_data = fr.response.get("result", fr.response)
-                            await websocket.send_json({
-                                "type": "state_sync",
-                                "key": "current_plan",
-                                "data": plan_data,
-                            })
-                        elif fr.name == "analyze_posture" and fr.response:
-                            report = fr.response.get("result", fr.response)
-                            await websocket.send_json({
-                                "type": "state_sync",
-                                "key": "user:posture_report",
-                                "data": report,
-                            })
-                        elif fr.name == "get_body_profile" and fr.response:
-                            await websocket.send_json({
-                                "type": "state_sync",
-                                "key": "user:body_profile",
-                                "data": fr.response,
-                            })
-                        elif fr.name == "update_body_profile" and fr.response:
-                            # Re-read full profile from session after update
-                            try:
-                                us = await session_service._get_user_state("muscleclaw", user_id)
-                                if "body_profile" in us:
-                                    await websocket.send_json({
-                                        "type": "state_sync",
-                                        "key": "user:body_profile",
-                                        "data": us["body_profile"],
-                                    })
-                            except Exception:
-                                pass
-
-                    # Navigation layer: AI UI commands (supplementary)
-                    for fc in (event.get_function_calls() or []):
-                        if fc.name == "send_ui_command":
-                            args = fc.args or {}
-                            cmd_data = {}
-                            if args.get("data_json"):
-                                try:
-                                    cmd_data = json.loads(args["data_json"])
-                                except (json.JSONDecodeError, TypeError):
-                                    cmd_data = {}
-                            await websocket.send_json({
-                                "type": "ui_command",
-                                "command": args.get("command", ""),
-                                "data": cmd_data,
-                            })
-                        elif fc.name == "trigger_safety_alert":
-                            await websocket.send_json({
-                                "type": "ui_command",
-                                "command": "show_safety_alert",
-                                "data": fc.args or {},
-                            })
-                        elif fc.name == "cancel_safety_alert":
-                            await websocket.send_json({
-                                "type": "ui_command",
-                                "command": "cancel_safety_alert",
-                                "data": {},
-                            })
+                    # All tool data is pushed directly by _push_to_frontend() in tools.
+                    # No fn_responses or function_calls processing needed here.
+                    # This eliminates race conditions where state_delta null values
+                    # overwrite data that was already pushed by the tool.
 
                 # Normal exit — stream ended cleanly
                 break

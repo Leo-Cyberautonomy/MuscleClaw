@@ -22,10 +22,12 @@ from config.exercise_library import EXERCISE_LIBRARY
 # ══════════════════════════════════════════════════════════════════
 
 def _push_to_frontend(ctx: ToolContext, key: str, data):
-    """Push state_sync directly to frontend via WebSocket registry.
+    """Push state_sync to frontend AND persist to Firestore.
 
     In Live mode, event.actions.state_delta doesn't propagate tool state
-    changes, so tools must push data directly through the WebSocket.
+    changes. So tools must:
+    1. Push data directly to frontend via WebSocket
+    2. Persist user: prefixed data directly to Firestore
     """
     import asyncio
     try:
@@ -33,12 +35,31 @@ def _push_to_frontend(ctx: ToolContext, key: str, data):
         ws = WS_REGISTRY.get(ctx.session.id)
         if ws:
             loop = asyncio.get_event_loop()
+            # 1. Push to frontend
             asyncio.run_coroutine_threadsafe(
                 ws.send_json({"type": "state_sync", "key": key, "data": data}),
                 loop,
             )
+            # 2. Persist user: keys to Firestore
+            if key.startswith("user:"):
+                firestore_key = key[len("user:"):]  # strip prefix
+                asyncio.run_coroutine_threadsafe(
+                    _persist_user_state(ctx, firestore_key, data),
+                    loop,
+                )
     except Exception as e:
         print(f"[Push] Failed to push {key}: {e}")
+
+
+async def _persist_user_state(ctx: ToolContext, key: str, value):
+    """Write a single user-state key directly to Firestore."""
+    try:
+        from app import session_service
+        ref = session_service._user_state_ref(ctx.session.app_name, ctx.session.user_id)
+        await ref.set({key: value}, merge=True)
+        print(f"[Firestore] Persisted user:{key}")
+    except Exception as e:
+        print(f"[Firestore] Failed to persist user:{key}: {e}")
 
 
 # ══════════════════════════════════════════════════════════════════
