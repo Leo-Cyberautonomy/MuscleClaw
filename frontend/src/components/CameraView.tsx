@@ -55,10 +55,7 @@ export function CameraView() {
       // Audio → WebSocket (non-blocking: if mic denied, WS still works)
       try {
         await audioEngine.startMic((pcm) => adkClient.sendAudio(pcm));
-        adkClient.sendJSON({
-          type: 'audio_config',
-          sample_rate: audioEngine.sampleRate,
-        });
+        adkClient.setAudioRate(audioEngine.sampleRate);
       } catch (e) {
         console.warn('[Audio] Mic access denied or failed:', e);
       }

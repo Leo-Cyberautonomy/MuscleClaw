@@ -13,6 +13,7 @@ class ADKClient {
   private handlers: MessageHandler = {};
   private reconnectAttempts = 0;
   private userId: string;
+  private pendingAudioRate: number | null = null;
 
   constructor() {
     this.userId = localStorage.getItem('muscleclaw_user_id') || crypto.randomUUID();
@@ -30,6 +31,12 @@ class ADKClient {
       useAppStore.getState().setConnected(true);
       this.reconnectAttempts = 0;
       console.log('[ADK] Connected');
+      // Send queued audio config now that WS is open
+      if (this.pendingAudioRate) {
+        this.sendJSON({ type: 'audio_config', sample_rate: this.pendingAudioRate });
+        console.log(`[ADK] Sent audio_config: ${this.pendingAudioRate}Hz`);
+        this.pendingAudioRate = null;
+      }
     };
 
     this.ws.onmessage = (ev) => {
@@ -86,6 +93,16 @@ class ADKClient {
       case 'update_set_info': training.updateTraining(data); break;
     }
     this.handlers.onUICommand?.(command, data);
+  }
+
+  /** Queue audio sample rate — sent on WS open or immediately if already open */
+  setAudioRate(rate: number) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.sendJSON({ type: 'audio_config', sample_rate: rate });
+      console.log(`[ADK] Sent audio_config: ${rate}Hz`);
+    } else {
+      this.pendingAudioRate = rate;
+    }
   }
 
   sendAudio(pcm: ArrayBuffer) {
