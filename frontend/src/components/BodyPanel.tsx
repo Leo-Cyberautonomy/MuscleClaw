@@ -64,11 +64,43 @@ export function BodyPanel({ landmarks, canvasWidth, canvasHeight }: BodyPanelPro
           }
         `}</style>
       </div>
+      {/* Connecting lines from landmarks to cards */}
+      <svg style={{
+        position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 4,
+        width: canvasWidth, height: canvasHeight,
+      }}>
+        <defs>
+          <linearGradient id="traceLine" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="rgba(0,210,255,0.1)" />
+            <stop offset="50%" stopColor="rgba(0,210,255,0.5)" />
+            <stop offset="100%" stopColor="rgba(0,210,255,0.1)" />
+          </linearGradient>
+        </defs>
+        {PART_CONFIG.map(({ part, anchor, offsetX, offsetY }) => {
+          const lm = landmarks[anchor];
+          if (!lm || (lm.visibility !== undefined && lm.visibility < 0.5)) return null;
+          const lx = (1 - lm.x) * canvasWidth;
+          const ly = lm.y * canvasHeight;
+          const cx = (1 - lm.x + offsetX) * canvasWidth;
+          const cy = (lm.y + offsetY) * canvasHeight;
+          return (
+            <g key={`line-${part}`}>
+              <line x1={lx} y1={ly} x2={cx} y2={cy}
+                stroke="url(#traceLine)" strokeWidth="1"
+                strokeDasharray="3 5" opacity="0.5"
+              />
+              {/* Anchor dot on body */}
+              <circle cx={lx} cy={ly} r="3" fill="rgba(0,210,255,0.6)"
+                style={{ filter: 'drop-shadow(0 0 3px rgba(0,210,255,0.5))' }}
+              />
+            </g>
+          );
+        })}
+      </svg>
       {PART_CONFIG.map(({ part, label, anchor, offsetX, offsetY }, idx) => {
         const lm = landmarks[anchor];
         if (!lm || (lm.visibility !== undefined && lm.visibility < 0.5)) return null;
 
-        // Mirror x because video is flipped
         const x = (1 - lm.x + offsetX) * canvasWidth;
         const y = (lm.y + offsetY) * canvasHeight;
 
