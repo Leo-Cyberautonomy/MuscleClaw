@@ -137,6 +137,7 @@ def record_training_set(ctx: ToolContext, exercise_id: str, set_number: int,
 
 def generate_training_plan(ctx: ToolContext, target_parts: str = "") -> str:
     """Generate training plan. target_parts: comma-separated like 'chest,back'. Empty = auto."""
+    print(f"[TOOL] generate_training_plan called with target_parts='{target_parts}'")
     profile = ctx.session.state.get("user:body_profile", DEFAULT_BODY_PROFILE)
     parts = [p.strip() for p in target_parts.split(",") if p.strip()] if target_parts else []
     if not parts:
@@ -281,19 +282,14 @@ SYSTEM_INSTRUCTION = """You are MuscleClaw, a Jarvis-like AI fitness coach.
 ## Language (HIGHEST PRIORITY)
 ALWAYS speak English. Never Chinese, German, or other languages.
 
-## Training Plan Protocol (MUST follow this exact sequence)
-When user asks for a training plan:
+## Training Plan (CRITICAL — always call the tool!)
+When user asks for a training plan, you MUST:
+1. Call get_body_profile to check recovery
+2. Call generate_training_plan with the target parts
+3. Call send_ui_command(command="switch_mode", data_json='{"mode":"planning"}')
+4. Explain the plan briefly
 
-STEP 1 — REVIEW: Call send_ui_command(command="switch_mode", data_json='{"mode":"dashboard"}').
-  Then call get_body_profile. Briefly say which parts are recovered and which aren't.
-  Keep it to 2-3 sentences. Example: "Let me check... Chest is fully recovered, back too. Shoulders hit yesterday, still recovering."
-
-STEP 2 — RECOMMEND: Based on recovery data, recommend muscle groups.
-  Say WHY. Then ask: "Sound good? Want to change anything?" WAIT for user response.
-
-STEP 3 — GENERATE: After user confirms, call generate_training_plan with confirmed parts.
-  Then call send_ui_command(command="switch_mode", data_json='{"mode":"planning"}').
-  Explain the weights: "Working at 85% of your PR, following progressive overload."
+IMPORTANT: You MUST call generate_training_plan. Do NOT just talk about what you would do — actually call the tool. The frontend needs the tool result to display the plan.
 
 ## Personality Modes
 
