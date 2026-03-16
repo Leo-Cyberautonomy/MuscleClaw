@@ -105,6 +105,7 @@ export function Sidebar() {
   const bodyProfile = useAppStore((s) => s.bodyProfile);
   const transcript = useAppStore((s) => s.transcript);
   const trainingPlan = useTrainingStore((s) => s.trainingPlan);
+  const workflowStep = useTrainingStore((s) => s.workflowStep);
   const training = useTrainingStore();
   const postureReport = usePoseStore((s) => s.postureReport);
   const postureScanning = usePoseStore((s) => s.postureScanning);
@@ -469,6 +470,49 @@ export function Sidebar() {
                   </div>
                 )}
               </>
+            ) : workflowStep ? (
+              /* Workflow progress indicator */
+              <div style={{
+                background: 'var(--bg-card)', borderRadius: 'var(--radius-card)',
+                boxShadow: 'var(--shadow-card)', padding: 18,
+                animation: 'scaleIn 0.4s var(--spring) both',
+              }}>
+                <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>生成训练计划</div>
+                {[
+                  { key: 'review', label: '分析恢复状态' },
+                  { key: 'recommend', label: '推荐训练部位' },
+                  { key: 'generate', label: '生成详细计划' },
+                ].map(({ key, label }) => {
+                  const isDone = (['review', 'recommend', 'generate'].indexOf(key)
+                    < ['review', 'recommend', 'generate'].indexOf(workflowStep.step))
+                    || (workflowStep.step === key && workflowStep.status === 'done');
+                  const isActive = workflowStep.step === key && workflowStep.status !== 'done';
+                  return (
+                    <div key={key} style={{
+                      display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0',
+                      opacity: isDone || isActive ? 1 : 0.4,
+                    }}>
+                      <div style={{
+                        width: 24, height: 24, borderRadius: '50%',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 12, fontWeight: 700,
+                        background: isDone ? '#34c759' : isActive ? 'var(--brand-purple)' : '#e5e5ea',
+                        color: isDone || isActive ? '#fff' : '#8e8e93',
+                        transition: 'all .3s var(--spring)',
+                      }}>
+                        {isDone ? '✓' : isActive ? '•' : '○'}
+                      </div>
+                      <span style={{
+                        fontSize: 13, fontWeight: isActive ? 700 : 500,
+                        color: isActive ? 'var(--text-primary)' : isDone ? '#34c759' : 'var(--text-tertiary)',
+                      }}>
+                        {label}
+                        {isActive && <span style={{ color: 'var(--brand-purple)', marginLeft: 6 }}>进行中...</span>}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
             ) : (
               <div style={{
                 background: 'var(--bg-card)', borderRadius: 'var(--radius-card)',

@@ -86,6 +86,7 @@ class ADKClient {
       case 'user:training_history': training.setTrainingHistory(data); break;
       case 'user:posture_report': pose.setPostureReport(data); break;
       case 'current_plan': training.setTrainingPlan(data); break;
+      case 'temp:workflow_step': training.setWorkflowStep(data); break;
     }
     console.log(`[ADK] State sync: ${key}`);
   }

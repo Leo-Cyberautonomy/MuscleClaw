@@ -107,16 +107,19 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     # or via the function_response fallback in forward_events.
 
     # Background task: consume events from run_live → forward to WebSocket
-    # No retry — retry causes duplicate audio (first attempt sends partial,
-    # retry sends same response again). On error, show message to user.
+    # With auto-retry on transient Gemini API errors (1008, etc.)
     async def forward_events():
-        try:
-            async for event in runner.run_live(
-                user_id=user_id,
-                session_id=session.id,
-                live_request_queue=live_queue,
-                run_config=run_config,
-            ):
+        max_retries = 3
+        current_session_id = session.id
+
+        for attempt in range(max_retries):
+            try:
+                async for event in runner.run_live(
+                    user_id=user_id,
+                    session_id=current_session_id,
+                    live_request_queue=live_queue,
+                    run_config=run_config,
+                ):
                     if event.content and event.content.parts:
                         for part in event.content.parts:
                             if (part.inline_data
@@ -136,7 +139,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                             print(f"[WS] state_delta keys: {list(event.actions.state_delta.keys())}")
                     if event.actions and event.actions.state_delta:
                         for key, value in event.actions.state_delta.items():
-                            if key.startswith("user:") or key == "current_plan":
+                            if key.startswith("user:") or key == "current_plan" or key.startswith("temp:"):
                                 await websocket.send_json({
                                     "type": "state_sync",
                                     "key": key,
@@ -209,26 +212,44 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                 "data": {},
                             })
 
-        except asyncio.CancelledError:
-            print(f"[Live] Cancelled for user {user_id}")
-        except Exception as e:
-            print(f"[Live] ERROR for user {user_id}: {type(e).__name__}: {e}")
-            traceback.print_exc()
-            err_str = str(e)
-            if "1008" in err_str:
-                user_msg = "AI 语音连接中断，请刷新页面重试。"
-            elif "1007" in err_str:
-                user_msg = "AI 连接参数错误，请刷新页面重试。"
-            else:
-                user_msg = f"AI 连接中断: {type(e).__name__}"
-            try:
-                await websocket.send_json({
-                    "type": "transcript",
-                    "role": "model",
-                    "text": user_msg,
-                })
-            except Exception:
-                pass
+                # Normal exit — stream ended cleanly
+                break
+
+            except asyncio.CancelledError:
+                print(f"[Live] Cancelled for user {user_id}")
+                return
+            except Exception as e:
+                print(f"[Live] ERROR for user {user_id} (attempt {attempt+1}/{max_retries}): {type(e).__name__}: {e}")
+                if attempt < max_retries - 1:
+                    # Create a fresh session and retry
+                    await asyncio.sleep(1)
+                    try:
+                        new_session = await session_service.create_session(
+                            app_name="muscleclaw", user_id=user_id
+                        )
+                        current_session_id = new_session.id
+                        print(f"[Live] Retrying with new session {current_session_id[:8]}...")
+                    except Exception as retry_err:
+                        print(f"[Live] Failed to create retry session: {retry_err}")
+                        break
+                else:
+                    traceback.print_exc()
+                    # Show user-friendly message instead of raw API error
+                    err_str = str(e)
+                    if "1008" in err_str:
+                        user_msg = "AI 语音服务暂时不可用，可能是 API 调用次数达到限制。请稍后再试。"
+                    elif "1007" in err_str:
+                        user_msg = "AI 连接参数错误，请刷新页面重试。"
+                    else:
+                        user_msg = f"AI 连接中断，正在尝试恢复... ({type(e).__name__})"
+                    try:
+                        await websocket.send_json({
+                            "type": "transcript",
+                            "role": "model",
+                            "text": user_msg,
+                        })
+                    except Exception:
+                        pass
 
     event_task = asyncio.create_task(forward_events())
 
