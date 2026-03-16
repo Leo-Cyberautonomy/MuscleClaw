@@ -473,6 +473,39 @@ export function Sidebar() {
                     />
                   </div>
                 ))}
+                {/* Session Metrics */}
+                {mode === 'training' && Object.keys(training.exerciseResults).length > 0 && (() => {
+                  const totalSets = Object.values(training.exerciseResults).reduce((s, r) => s + r.length, 0);
+                  const targetSets = trainingPlan.exercises?.reduce((s: number, e: any) => s + (e.target_sets ?? 4), 0) ?? 0;
+                  const totalVolume = Object.values(training.exerciseResults).reduce((s, sets) => s + sets.reduce((ss, r) => ss + r.weight * r.reps, 0), 0);
+                  const allDone = totalSets >= targetSets && targetSets > 0;
+
+                  return allDone ? (
+                    /* Training Complete Summary */
+                    <div style={{
+                      background: 'linear-gradient(135deg, #34C759, #30D158)',
+                      borderRadius: 'var(--radius-card)', padding: 20,
+                      color: '#fff', animation: 'scaleIn 0.5s var(--spring) both',
+                    }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', opacity: .8, textTransform: 'uppercase' }}>
+                        Session Complete
+                      </div>
+                      <div style={{ fontSize: 20, fontWeight: 800, marginTop: 6 }}>
+                        Great workout!
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 14 }}>
+                        <div style={{ textAlign: 'center', padding: 10, background: 'rgba(255,255,255,.15)', borderRadius: 10 }}>
+                          <div style={{ fontSize: 9, opacity: .7, letterSpacing: '.05em', textTransform: 'uppercase' }}>Sets</div>
+                          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 800, marginTop: 2 }}>{totalSets}</div>
+                        </div>
+                        <div style={{ textAlign: 'center', padding: 10, background: 'rgba(255,255,255,.15)', borderRadius: 10 }}>
+                          <div style={{ fontSize: 9, opacity: .7, letterSpacing: '.05em', textTransform: 'uppercase' }}>Volume</div>
+                          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 800, marginTop: 2 }}>{totalVolume.toLocaleString()}kg</div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null;
+                })()}
                 {mode === 'training' && Object.keys(training.exerciseResults).length > 0 && (
                   <div style={{
                     background: 'var(--bg-card)', borderRadius: 'var(--radius-card)',

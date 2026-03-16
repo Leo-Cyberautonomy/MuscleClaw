@@ -19,17 +19,17 @@ const PART_CONFIG: {
   offsetX: number;
   offsetY: number;
 }[] = [
-  { part: 'chest', label: '胸', anchor: POSE.LEFT_SHOULDER, offsetX: -0.18, offsetY: 0.05 },
-  { part: 'shoulders', label: '肩', anchor: POSE.RIGHT_SHOULDER, offsetX: 0.18, offsetY: -0.04 },
-  { part: 'back', label: '背', anchor: POSE.LEFT_SHOULDER, offsetX: -0.20, offsetY: 0.15 },
-  { part: 'arms', label: '手臂', anchor: POSE.LEFT_ELBOW, offsetX: -0.16, offsetY: 0 },
-  { part: 'core', label: '核心', anchor: POSE.LEFT_HIP, offsetX: -0.18, offsetY: 0 },
-  { part: 'legs', label: '腿', anchor: POSE.LEFT_KNEE, offsetX: -0.16, offsetY: 0 },
+  { part: 'chest', label: 'Chest', anchor: POSE.LEFT_SHOULDER, offsetX: -0.18, offsetY: 0.05 },
+  { part: 'shoulders', label: 'Shoulders', anchor: POSE.RIGHT_SHOULDER, offsetX: 0.18, offsetY: -0.04 },
+  { part: 'back', label: 'Back', anchor: POSE.LEFT_SHOULDER, offsetX: -0.20, offsetY: 0.15 },
+  { part: 'arms', label: 'Arms', anchor: POSE.LEFT_ELBOW, offsetX: -0.16, offsetY: 0 },
+  { part: 'core', label: 'Core', anchor: POSE.LEFT_HIP, offsetX: -0.18, offsetY: 0 },
+  { part: 'legs', label: 'Legs', anchor: POSE.LEFT_KNEE, offsetX: -0.16, offsetY: 0 },
 ];
 
 const PART_NAMES_EXERCISE: Record<string, string> = {
-  chest: '卧推', shoulders: '过头推举', back: '杠铃划船',
-  legs: '深蹲', core: '平板支撑', arms: '弯举',
+  chest: 'Bench Press', shoulders: 'OHP', back: 'Row',
+  legs: 'Squat', core: 'Plank', arms: 'Curl',
 };
 
 interface BodyPanelProps {
@@ -46,6 +46,24 @@ export function BodyPanel({ landmarks, canvasWidth, canvasHeight }: BodyPanelPro
 
   return (
     <>
+      {/* CT-scan sweep line animation */}
+      <div style={{
+        position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 5,
+        overflow: 'hidden',
+      }}>
+        <div style={{
+          position: 'absolute', left: 0, right: 0, height: 3,
+          background: 'linear-gradient(90deg, transparent, rgba(0,210,255,0.3), rgba(0,210,255,0.6), rgba(0,210,255,0.3), transparent)',
+          boxShadow: '0 0 20px rgba(0,210,255,0.3)',
+          animation: 'scanSweep 3s ease-in-out 1',
+        }} />
+        <style>{`
+          @keyframes scanSweep {
+            0% { top: 0%; opacity: 1; }
+            100% { top: 100%; opacity: 0; }
+          }
+        `}</style>
+      </div>
       {PART_CONFIG.map(({ part, label, anchor, offsetX, offsetY }) => {
         const lm = landmarks[anchor];
         if (!lm || (lm.visibility !== undefined && lm.visibility < 0.5)) return null;
