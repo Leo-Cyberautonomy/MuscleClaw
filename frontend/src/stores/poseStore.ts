@@ -12,11 +12,13 @@ import type { PostureReport } from '../cv/postureScanner';
 interface PoseState {
   landmarks: Landmark[] | null;
   handLandmarks: any[] | null;
+  canvasSize: { w: number; h: number };
   postureReport: PostureReport | null;
   postureScanning: boolean;
 
   setLandmarks: (lm: Landmark[] | null) => void;
   setHandLandmarks: (lm: any[] | null) => void;
+  setCanvasSize: (w: number, h: number) => void;
   setPostureReport: (report: PostureReport | null) => void;
   setPostureScanning: (scanning: boolean) => void;
 }
@@ -24,11 +26,13 @@ interface PoseState {
 export const usePoseStore = create<PoseState>((set) => ({
   landmarks: null,
   handLandmarks: null,
+  canvasSize: { w: 0, h: 0 },
   postureReport: null,
   postureScanning: false,
 
   setLandmarks: (landmarks) => set({ landmarks }),
   setHandLandmarks: (handLandmarks) => set({ handLandmarks }),
+  setCanvasSize: (w, h) => set({ canvasSize: { w, h } }),
   setPostureReport: (postureReport) => set({ postureReport }),
   setPostureScanning: (postureScanning) => set({ postureScanning }),
 }));

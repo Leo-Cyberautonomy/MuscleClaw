@@ -207,11 +207,11 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
         "session_id": session.id,
     })
 
-    # Initial state push: read user data via a background task
-    # (Firestore async reads hang in the main handler context on Cloud Run,
-    # so we push initial data as part of the first event cycle instead)
-    # The frontend will get data via state_sync when tools are called,
-    # or via the function_response fallback in forward_events.
+    # Push initial user data from Firestore to frontend
+    for key in ("user:body_profile", "user:training_history", "user:preferences", "user:posture_report"):
+        val = session.state.get(key)
+        if val:
+            await websocket.send_json({"type": "state_sync", "key": key, "data": val})
 
     # Background task: consume events from run_live → forward to WebSocket
     # With auto-retry on transient Gemini API errors (1008, etc.)

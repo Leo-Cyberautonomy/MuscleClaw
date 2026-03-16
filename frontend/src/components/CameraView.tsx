@@ -121,6 +121,7 @@ export function CameraView() {
           canvas.height = rect.height;
         }
         canvasSizeRef.current = { w: canvas.width, h: canvas.height };
+        usePoseStore.getState().setCanvasSize(canvas.width, canvas.height);
 
         const ctx = canvas.getContext('2d')!;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -280,11 +281,7 @@ export function CameraView() {
         style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
       />
       {/* Floating body cards in body_scan mode */}
-      <BodyPanel
-        landmarks={landmarksRef.current}
-        canvasWidth={canvasSizeRef.current.w}
-        canvasHeight={canvasSizeRef.current.h}
-      />
+      <BodyPanel />
       <TrainingHUD />
       <RestTimer />
       {/* Mode indicator */}

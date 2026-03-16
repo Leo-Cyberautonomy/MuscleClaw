@@ -6,8 +6,8 @@
  * Only visible in body_scan mode.
  */
 import { useAppStore } from '../stores/appStore';
+import { usePoseStore } from '../stores/poseStore';
 import { BodyCard } from './BodyCard';
-import type { Landmark } from '../cv/types';
 import { POSE } from '../cv/types';
 
 const PART_CONFIG: {
@@ -32,15 +32,11 @@ const PART_NAMES_EXERCISE: Record<string, string> = {
   legs: 'Squat', core: 'Plank', arms: 'Curl',
 };
 
-interface BodyPanelProps {
-  landmarks: Landmark[] | null;
-  canvasWidth: number;
-  canvasHeight: number;
-}
-
-export function BodyPanel({ landmarks, canvasWidth, canvasHeight }: BodyPanelProps) {
+export function BodyPanel() {
   const mode = useAppStore((s) => s.mode);
   const bodyProfile = useAppStore((s) => s.bodyProfile);
+  const landmarks = usePoseStore((s) => s.landmarks);
+  const { w: canvasWidth, h: canvasHeight } = usePoseStore((s) => s.canvasSize);
 
   if ((mode !== 'body_scan' && mode !== 'dashboard') || !landmarks || canvasWidth === 0) return null;
 
