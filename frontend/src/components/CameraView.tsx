@@ -22,6 +22,36 @@ import { RestTimer } from './RestTimer';
 
 const audioEngine = new AudioEngine();
 
+// Landmark index → muscle group mapping for click detection
+const LANDMARK_TO_MUSCLE: Record<number, string> = {
+  11: 'chest', 12: 'chest',       // Chest: shoulder landmarks
+  13: 'shoulders', 14: 'shoulders', // Shoulders: upper arm
+  15: 'arms', 16: 'arms',          // Arms: elbows
+  17: 'arms', 18: 'arms',          // Arms: wrists
+  23: 'core', 24: 'core',          // Core: hips
+  25: 'legs', 26: 'legs',          // Legs: knees
+  27: 'legs', 28: 'legs',          // Legs: ankles
+};
+
+function findNearestMuscle(clickX: number, clickY: number, landmarks: Landmark[], canvasW: number, canvasH: number): string | null {
+  let best: string | null = null;
+  let bestDist = Infinity;
+  for (const [idxStr, muscle] of Object.entries(LANDMARK_TO_MUSCLE)) {
+    const idx = parseInt(idxStr);
+    const lm = landmarks[idx];
+    if (!lm) continue;
+    // Mirror X to match camera flip
+    const lx = (1 - lm.x) * canvasW;
+    const ly = lm.y * canvasH;
+    const dist = Math.sqrt((clickX - lx) ** 2 + (clickY - ly) ** 2);
+    if (dist < bestDist && dist < 80) { // 80px threshold
+      bestDist = dist;
+      best = muscle;
+    }
+  }
+  return best;
+}
+
 export function CameraView() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -197,8 +227,23 @@ export function CameraView() {
     };
   }, []);
 
+  function handleCameraClick(e: React.MouseEvent) {
+    const landmarks = landmarksRef.current;
+    if (!landmarks) return;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    const muscle = findNearestMuscle(clickX, clickY, landmarks, rect.width, rect.height);
+    if (muscle) {
+      // Switch to dashboard and tell AI about the click
+      useAppStore.getState().setMode('dashboard');
+      adkClient.sendText(`[CLICK] User tapped on ${muscle} muscle group on camera. Tell them about their ${muscle} status.`);
+    }
+  }
+
   return (
-    <div ref={containerRef} style={{ position: 'relative', width: '100%', height: '100%' }}>
+    <div ref={containerRef} onClick={handleCameraClick} style={{ position: 'relative', width: '100%', height: '100%', cursor: 'crosshair' }}>
       <video
         ref={videoRef}
         style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }}

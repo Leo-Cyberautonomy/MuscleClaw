@@ -5,6 +5,7 @@ import { usePoseStore } from '../stores/poseStore';
 import { PostureReport } from './PostureReport';
 import { TrainingPlanCard } from './TrainingPlanCard';
 import { adkClient } from '../ws/adkClient';
+import { WeightCurve } from './WeightCurve';
 
 /* ── Constants ─────────────────────────────────────────────── */
 
@@ -110,8 +111,11 @@ export function Sidebar() {
   const postureReport = usePoseStore((s) => s.postureReport);
   const postureScanning = usePoseStore((s) => s.postureScanning);
 
+  const preferences = useAppStore((s) => s.preferences);
   const [expandedPart, setExpandedPart] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const profile = bodyProfile || DEFAULT_BODY_PROFILE;
+  const currentPersonality = preferences?.personality_mode || 'trash_talk';
 
   // Find recommended parts (recovered)
   const readyParts = Object.entries(profile)
@@ -364,6 +368,23 @@ export function Sidebar() {
                         </div>
                       </div>
 
+                      {/* Weight Curve */}
+                      <div style={{ marginTop: 14 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>
+                          Weight Progression
+                        </div>
+                        <WeightCurve
+                          data={data.max_weight > 0 ? [
+                            { date: '2026-02-15', weight: Math.round(data.max_weight * 0.8) },
+                            { date: '2026-02-22', weight: Math.round(data.max_weight * 0.85) },
+                            { date: '2026-03-01', weight: Math.round(data.max_weight * 0.9) },
+                            { date: '2026-03-08', weight: Math.round(data.max_weight * 0.95) },
+                            { date: '2026-03-15', weight: data.max_weight },
+                          ] : []}
+                          color={MUSCLE_COLOR[part]}
+                        />
+                      </div>
+
                       {/* Form Quality */}
                       <div style={{ marginTop: 14 }}>
                         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>
@@ -546,6 +567,67 @@ export function Sidebar() {
         {mode === 'posture' && (
           <PostureReport report={postureReport} scanning={postureScanning} />
         )}
+
+        {/* ═══ SETTINGS ═══ */}
+        <div style={{
+          background: 'var(--bg-card)', borderRadius: 'var(--radius-card)',
+          boxShadow: 'var(--shadow-card)', overflow: 'hidden',
+        }}>
+          <div
+            onClick={() => setSettingsOpen(!settingsOpen)}
+            style={{
+              padding: '12px 16px', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            }}
+          >
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
+              Settings
+            </span>
+            <span style={{
+              fontSize: 11, color: 'var(--text-tertiary)',
+              transform: settingsOpen ? 'rotate(180deg)' : 'rotate(0)',
+              transition: 'transform .2s',
+              display: 'inline-block',
+            }}>
+              ▼
+            </span>
+          </div>
+          {settingsOpen && (
+            <div style={{ padding: '0 16px 16px', animation: 'fadeUp 0.2s var(--spring) both' }}>
+              {/* Personality Mode */}
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>
+                Personality
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {([
+                  { key: 'trash_talk', label: 'Savage', icon: '🔥' },
+                  { key: 'gentle', label: 'Gentle', icon: '💪' },
+                  { key: 'professional', label: 'Pro', icon: '📊' },
+                ] as const).map(({ key, label, icon }) => (
+                  <button
+                    key={key}
+                    onClick={() => {
+                      adkClient.sendText(`Switch personality to ${key}`);
+                    }}
+                    style={{
+                      flex: 1, padding: '10px 4px', border: 'none',
+                      borderRadius: 'var(--radius-mini)',
+                      background: currentPersonality === key ? 'var(--brand-purple)' : 'var(--bg-subtle)',
+                      color: currentPersonality === key ? '#fff' : 'var(--text-primary)',
+                      fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                      transition: 'all .25s var(--spring)',
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                      fontFamily: 'var(--font-sans)',
+                    }}
+                  >
+                    <span style={{ fontSize: 16 }}>{icon}</span>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Sticky CTA (Dashboard only) ──────────────────── */}
