@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useAppStore } from '../stores/appStore';
 import { useTrainingStore } from '../stores/trainingStore';
 import { usePoseStore } from '../stores/poseStore';
@@ -84,19 +84,26 @@ function ActivityRing({ percent, size = 48 }: { percent: number; size?: number }
 /* ── Recovery percentage calculation ───────────────────────── */
 
 function getRecoveryPercent(data: any): number {
-  if (data.recovery_status === 'recovered') return 100;
-  if (!data.last_trained) return 100;
-  const hoursElapsed = (Date.now() - new Date(data.last_trained).getTime()) / 3600000;
-  const pct = Math.min(100, Math.round((hoursElapsed / (data.recovery_hours || 72)) * 100));
-  return pct;
+  if (!data || typeof data !== 'object') return 100;
+  try {
+    if (data.recovery_status === 'recovered') return 100;
+    if (!data.last_trained) return 100;
+    const hoursElapsed = (Date.now() - new Date(data.last_trained).getTime()) / 3600000;
+    if (isNaN(hoursElapsed)) return 100;
+    const pct = Math.min(100, Math.round((hoursElapsed / (data.recovery_hours || 72)) * 100));
+    return pct;
+  } catch { return 100; }
 }
 
-function getLastTrainedLabel(dateStr: string): string {
-  if (!dateStr) return 'No record';
-  const days = Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
-  if (days === 0) return 'Today';
-  if (days === 1) return 'Yesterday';
-  return `${days}d ago`;
+function getLastTrainedLabel(dateStr: any): string {
+  if (!dateStr || typeof dateStr !== 'string') return 'No record';
+  try {
+    const days = Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
+    if (isNaN(days)) return 'No record';
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Yesterday';
+    return `${days}d ago`;
+  } catch { return 'No record'; }
 }
 
 /* ── Main Component ────────────────────────────────────────── */
@@ -126,19 +133,9 @@ export function Sidebar() {
 
   const isDashboard = mode === 'dashboard' || mode === 'body_scan';
 
-  // Data-driven auto-navigation: when new plan arrives, switch to planning
-  useEffect(() => {
-    if (trainingPlan && (mode === 'idle' || mode === 'dashboard' || mode === 'body_scan')) {
-      useAppStore.getState().setMode('planning');
-    }
-  }, [trainingPlan]);
-
-  // When new posture report arrives, switch to posture
-  useEffect(() => {
-    if (postureReport && (mode === 'idle' || mode === 'dashboard' || mode === 'body_scan')) {
-      useAppStore.getState().setMode('posture');
-    }
-  }, [postureReport]);
+  // Auto-navigation removed — was causing sidebar to flash/crash
+  // when Firestore loads old data on connect. Mode is now controlled
+  // only by user clicks or AI send_ui_command.
 
   return (
     <div className="sidebar-scroll" style={{
