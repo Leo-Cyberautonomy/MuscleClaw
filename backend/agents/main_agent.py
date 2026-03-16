@@ -131,6 +131,7 @@ def record_training_set(ctx: ToolContext, exercise_id: str, set_number: int,
         "symmetry_score": symmetry_score or None,
     })
     ctx.session.state["user:training_history"] = history
+    _push_to_frontend(ctx, "user:training_history", history)
     ex_name = EXERCISE_LIBRARY.get(exercise_id, {}).get("name_en", exercise_id)
     return f"Recorded: {ex_name} set {set_number}, {weight}kg x {reps}"
 
