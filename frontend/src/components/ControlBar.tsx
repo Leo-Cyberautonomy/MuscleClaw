@@ -6,6 +6,7 @@ const MODES: { mode: AppMode; label: string }[] = [
   { mode: 'dashboard', label: 'Dashboard' },
   { mode: 'planning', label: 'Plan' },
   { mode: 'training', label: 'Train' },
+  { mode: 'posture', label: 'Posture' },
 ];
 
 export function ControlBar() {

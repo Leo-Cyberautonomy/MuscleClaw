@@ -1,5 +1,6 @@
 import { useAppStore } from '../stores/appStore';
 import { useTrainingStore } from '../stores/trainingStore';
+import { usePoseStore } from '../stores/poseStore';
 import { useUIStore } from '../stores/uiStore';
 
 type MessageHandler = {
@@ -64,10 +65,29 @@ class ADKClient {
         this.handlers.onTranscript?.(msg.role, msg.text);
         useAppStore.getState().addTranscript(msg.role, msg.text);
         break;
+      case 'state_sync':
+        this.handleStateSync(msg.key, msg.data);
+        break;
       case 'ui_command':
         this.handleUICommand(msg.command, msg.data);
         break;
     }
+  }
+
+  /** Data layer: backend pushes state changes → update stores */
+  private handleStateSync(key: string, data: any) {
+    const app = useAppStore.getState();
+    const training = useTrainingStore.getState();
+    const pose = usePoseStore.getState();
+
+    switch (key) {
+      case 'user:body_profile': app.setBodyProfile(data); break;
+      case 'user:preferences': app.setPreferences(data); break;
+      case 'user:training_history': training.setTrainingHistory(data); break;
+      case 'user:posture_report': pose.setPostureReport(data); break;
+      case 'current_plan': training.setTrainingPlan(data); break;
+    }
+    console.log(`[ADK] State sync: ${key}`);
   }
 
   private handleUICommand(command: string, data: any) {

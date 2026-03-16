@@ -15,11 +15,13 @@ interface AppState {
   connected: boolean;
   transcript: { role: 'user' | 'model'; text: string; ts: number }[];
   bodyProfile: Record<string, any> | null;
+  preferences: Record<string, any> | null;
 
   setMode: (mode: AppMode) => void;
   setConnected: (v: boolean) => void;
   addTranscript: (role: 'user' | 'model', text: string) => void;
   setBodyProfile: (profile: any) => void;
+  setPreferences: (prefs: any) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -27,6 +29,7 @@ export const useAppStore = create<AppState>((set) => ({
   connected: false,
   transcript: [],
   bodyProfile: null,
+  preferences: null,
 
   setMode: (mode) => set({ mode }),
   setConnected: (connected) => set({ connected }),
@@ -34,6 +37,7 @@ export const useAppStore = create<AppState>((set) => ({
     transcript: [...s.transcript.slice(-50), { role, text, ts: Date.now() }],
   })),
   setBodyProfile: (bodyProfile) => set({ bodyProfile }),
+  setPreferences: (preferences) => set({ preferences }),
 }));
 
 // Re-export modular stores

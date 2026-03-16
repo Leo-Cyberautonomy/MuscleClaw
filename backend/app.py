@@ -100,6 +100,15 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
         "session_id": session.id,
     })
 
+    # Push initial user data to frontend (data layer — MECE)
+    for key in ["user:body_profile", "user:preferences", "user:training_history", "user:posture_report"]:
+        val = session.state.get(key)
+        if val:
+            await websocket.send_json({"type": "state_sync", "key": key, "data": val})
+    plan = session.state.get("current_plan")
+    if plan:
+        await websocket.send_json({"type": "state_sync", "key": "current_plan", "data": plan})
+
     # Background task: consume events from run_live → forward to WebSocket
     # With auto-retry on transient Gemini API errors (1008, etc.)
     async def forward_events():
@@ -127,28 +136,17 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                     "text": part.text,
                                 })
 
-                    fn_responses = event.get_function_responses() or []
-                    fn_calls = event.get_function_calls() or []
-                    if fn_responses:
-                        print(f"[WS] Function responses: {[fr.name for fr in fn_responses]}")
-                    if fn_calls:
-                        print(f"[WS] Function calls: {[fc.name for fc in fn_calls]}")
+                    # Data layer: push state changes to frontend (100% reliable)
+                    if event.actions and event.actions.state_delta:
+                        for key, value in event.actions.state_delta.items():
+                            if key.startswith("user:") or key == "current_plan":
+                                await websocket.send_json({
+                                    "type": "state_sync",
+                                    "key": key,
+                                    "data": value,
+                                })
 
-                    for fr in fn_responses:
-                        if fr.name == "generate_training_plan" and fr.response:
-                            plan_data = fr.response.get("result", fr.response)
-                            await websocket.send_json({
-                                "type": "ui_command",
-                                "command": "show_training_plan",
-                                "data": {"plan": plan_data},
-                            })
-                        elif fr.name == "analyze_posture" and fr.response:
-                            await websocket.send_json({
-                                "type": "ui_command",
-                                "command": "show_posture_report",
-                                "data": fr.response.get("result", fr.response),
-                            })
-
+                    # Navigation layer: AI UI commands (supplementary)
                     for fc in (event.get_function_calls() or []):
                         if fc.name == "send_ui_command":
                             args = fc.args or {}

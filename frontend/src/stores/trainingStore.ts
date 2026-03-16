@@ -22,6 +22,7 @@ interface TrainingState {
   targetSets: number;
   restTimerSeconds: number;
   trainingPlan: any | null;
+  trainingHistory: any[];
   /** Per-exercise set results, keyed by exercise index */
   exerciseResults: Record<number, SetResult[]>;
 
@@ -30,6 +31,7 @@ interface TrainingState {
   >>) => void;
   setRestTimer: (seconds: number) => void;
   setTrainingPlan: (plan: any) => void;
+  setTrainingHistory: (history: any[]) => void;
   /** Record a completed set for a given exercise index */
   recordSetResult: (exerciseIndex: number, result: SetResult) => void;
   resetTraining: () => void;
@@ -45,11 +47,13 @@ export const useTrainingStore = create<TrainingState>((set) => ({
   targetSets: 4,
   restTimerSeconds: 0,
   trainingPlan: null,
+  trainingHistory: [],
   exerciseResults: {},
 
   updateTraining: (partial) => set((s) => ({ ...s, ...partial })),
   setRestTimer: (restTimerSeconds) => set({ restTimerSeconds }),
   setTrainingPlan: (trainingPlan) => set({ trainingPlan, exerciseResults: {}, activeExerciseIndex: -1 }),
+  setTrainingHistory: (trainingHistory) => set({ trainingHistory }),
   recordSetResult: (exerciseIndex, result) => set((s) => {
     const prev = s.exerciseResults[exerciseIndex] ?? [];
     return {

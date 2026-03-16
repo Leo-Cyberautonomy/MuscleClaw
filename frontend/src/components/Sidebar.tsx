@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAppStore } from '../stores/appStore';
 import { useTrainingStore } from '../stores/trainingStore';
 import { usePoseStore } from '../stores/poseStore';
 import { PostureReport } from './PostureReport';
 import { TrainingPlanCard } from './TrainingPlanCard';
+import { adkClient } from '../ws/adkClient';
 
 /* ── Constants ─────────────────────────────────────────────── */
 
@@ -117,6 +118,20 @@ export function Sidebar() {
     .map(([k]) => k);
 
   const isDashboard = mode === 'dashboard' || mode === 'body_scan';
+
+  // Data-driven auto-navigation: when new plan arrives, switch to planning
+  useEffect(() => {
+    if (trainingPlan && (mode === 'idle' || mode === 'dashboard' || mode === 'body_scan')) {
+      useAppStore.getState().setMode('planning');
+    }
+  }, [trainingPlan]);
+
+  // When new posture report arrives, switch to posture
+  useEffect(() => {
+    if (postureReport && (mode === 'idle' || mode === 'dashboard' || mode === 'body_scan')) {
+      useAppStore.getState().setMode('posture');
+    }
+  }, [postureReport]);
 
   return (
     <div className="sidebar-scroll" style={{
@@ -241,16 +256,18 @@ export function Sidebar() {
                     : '所有部位正在恢复中，建议今天休息'}
               </div>
               {readyParts.length > 0 && (
-                <div style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                  marginTop: 12, padding: '9px 18px',
-                  background: 'rgba(255,255,255,.22)',
-                  backdropFilter: 'blur(8px)',
-                  border: '1px solid rgba(255,255,255,.3)',
-                  borderRadius: 'var(--radius-mini)',
-                  fontSize: 13, fontWeight: 700, cursor: 'pointer',
-                  transition: 'all .25s var(--spring)',
-                }}>
+                <div
+                  onClick={() => adkClient.sendText(`帮我制定${readyParts.slice(0, 2).map(p => PART_NAMES[p]).join('和')}的训练计划`)}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    marginTop: 12, padding: '9px 18px',
+                    background: 'rgba(255,255,255,.22)',
+                    backdropFilter: 'blur(8px)',
+                    border: '1px solid rgba(255,255,255,.3)',
+                    borderRadius: 'var(--radius-mini)',
+                    fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                    transition: 'all .25s var(--spring)',
+                  }}>
                   <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round">
                     <polygon points="5 3 19 12 5 21 5 3" />
                   </svg>
@@ -456,11 +473,26 @@ export function Sidebar() {
               <div style={{
                 background: 'var(--bg-card)', borderRadius: 'var(--radius-card)',
                 boxShadow: 'var(--shadow-card)', padding: 18,
-                fontSize: 13, color: 'var(--text-secondary)',
               }}>
-                {mode === 'planning'
-                  ? '说 "帮我制定训练计划" 让 AI 生成个性化方案'
-                  : '请先制定训练计划再开始训练'}
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 14 }}>
+                  {mode === 'planning'
+                    ? '说 "帮我制定训练计划" 或点击下方按钮'
+                    : '请先制定训练计划再开始训练'}
+                </div>
+                <button
+                  onClick={() => adkClient.sendText('帮我制定训练计划')}
+                  style={{
+                    width: '100%', padding: 12, border: 'none',
+                    borderRadius: 'var(--radius-mini)',
+                    background: 'var(--brand-gradient)',
+                    color: '#fff', fontSize: 14, fontWeight: 700,
+                    cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                    boxShadow: 'var(--shadow-brand)',
+                    transition: 'all .25s var(--spring)',
+                  }}
+                >
+                  生成训练计划
+                </button>
               </div>
             )}
           </>
