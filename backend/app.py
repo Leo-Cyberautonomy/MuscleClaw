@@ -22,6 +22,10 @@ from agents.main_agent import root_agent
 from config.defaults import DEFAULT_PREFERENCES
 from config.exercise_library import EXERCISE_LIBRARY
 
+# Global WebSocket registry for tools to push data directly
+# (Live mode state_delta doesn't propagate tool state changes)
+WS_REGISTRY: dict[str, WebSocket] = {}
+
 app = FastAPI()
 
 app.add_middleware(
@@ -73,6 +77,9 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     session = await session_service.create_session(
         app_name="muscleclaw", user_id=user_id
     )
+
+    # Register WebSocket so tools can push data directly
+    WS_REGISTRY[session.id] = websocket
 
     # Create live request queue for bidi-streaming
     live_queue = LiveRequestQueue()
@@ -304,6 +311,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     finally:
         live_queue.close()
         event_task.cancel()
+        # Unregister WebSocket
+        WS_REGISTRY.pop(session.id, None)
 
 
 # Serve frontend static files in production

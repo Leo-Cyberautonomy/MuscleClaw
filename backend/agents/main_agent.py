@@ -14,12 +14,37 @@ from config.exercise_library import EXERCISE_LIBRARY
 
 
 # ══════════════════════════════════════════════════════════════════
+# LIVE MODE PUSH HELPER
+# ══════════════════════════════════════════════════════════════════
+
+def _push_to_frontend(ctx: ToolContext, key: str, data):
+    """Push state_sync directly to frontend via WebSocket registry.
+
+    In Live mode, event.actions.state_delta doesn't propagate tool state changes,
+    so tools must push data directly through the WebSocket.
+    """
+    import asyncio
+    try:
+        from app import WS_REGISTRY
+        ws = WS_REGISTRY.get(ctx.session.id)
+        if ws:
+            loop = asyncio.get_event_loop()
+            asyncio.run_coroutine_threadsafe(
+                ws.send_json({"type": "state_sync", "key": key, "data": data}),
+                loop,
+            )
+    except Exception as e:
+        print(f"[Push] Failed to push {key}: {e}")
+
+
+# ══════════════════════════════════════════════════════════════════
 # TOOLS
 # ══════════════════════════════════════════════════════════════════
 
 def get_body_profile(ctx: ToolContext) -> str:
     """Get user's 6 muscle group strength data and recovery status. Returns a human-readable summary."""
     profile = ctx.session.state.get("user:body_profile", DEFAULT_BODY_PROFILE)
+    _push_to_frontend(ctx, "user:body_profile", profile)
     lines = []
     for part, data in profile.items():
         ex = data.get("exercise", "unknown")
@@ -143,6 +168,11 @@ def generate_training_plan(ctx: ToolContext, target_parts: str = "") -> str:
             "target_weight": target_w,
             "completed_sets": 0,
         })
+
+    # Push plan directly to frontend via WebSocket registry
+    # (Live mode state_delta doesn't propagate tool state changes)
+    plan = {"target_parts": parts, "exercises": exercises}
+    _push_to_frontend(ctx, "current_plan", plan)
         lines.append(f"  {ex_name}: 4 sets x 6 reps @ {target_w}kg (85% of {max_w}kg PR)")
 
     plan = {"target_parts": parts, "exercises": exercises}
@@ -235,6 +265,7 @@ def analyze_posture(ctx: ToolContext, shoulder_tilt_degrees: float = 0,
     if notes:
         report["notes"] = notes
     ctx.session.state["user:posture_report"] = report
+    _push_to_frontend(ctx, "user:posture_report", report)
 
     if not issues:
         return "Posture analysis: Good. No significant issues detected."
@@ -255,6 +286,7 @@ def send_ui_command(ctx: ToolContext, command: str, data_json: str = "") -> str:
     ctx.session.state["temp:last_ui_command"] = {
         "command": command, "data": parsed_data,
     }
+    _push_to_frontend(ctx, "ui_command", {"command": command, "data": parsed_data})
     return f"UI command sent: {command}"
 
 
