@@ -110,7 +110,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                 await websocket.send_json({"type": "state_sync", "key": f"user:{key}", "data": val})
                 print(f"[WS] Pushed user:{key}")
     except Exception as e:
-        import traceback
         traceback.print_exc()
         print(f"[WS] Failed to push initial state: {e}")
 
