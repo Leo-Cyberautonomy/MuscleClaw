@@ -158,6 +158,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             )
         ),
         response_modalities=["AUDIO"],
+        input_audio_transcription=types.AudioTranscriptionConfig(),
+        output_audio_transcription=types.AudioTranscriptionConfig(),
     )
 
     await websocket.send_json({
@@ -192,11 +194,18 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                     and part.inline_data.mime_type.startswith("audio/")):
                                 await websocket.send_bytes(part.inline_data.data)
                             elif part.text and not event.partial:
+                                # Check if this is user input transcription
+                                is_user = event.content.role == "user"
                                 await websocket.send_json({
                                     "type": "transcript",
-                                    "role": "model",
+                                    "role": "user" if is_user else "model",
                                     "text": part.text,
                                 })
+                                # Route user speech through text model for tool calls
+                                if is_user and len(part.text) > 3:
+                                    asyncio.create_task(
+                                        _route_and_execute(part.text, session, websocket)
+                                    )
 
                     # Data layer: push state changes to frontend
                     if event.actions:
