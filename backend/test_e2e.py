@@ -69,8 +69,8 @@ async def main():
     print("[4/12] update_body_profile")
     async with websockets.connect(f"{BASE}/t-upd-bp", open_timeout=20) as ws:
         await ws.recv()
-        await ws.send(json.dumps({"type": "text", "text": "Update chest max weight to 120kg"}))
-        a, s, t = await collect(ws, timeout=15)
+        await ws.send(json.dumps({"type": "text", "text": "Call update_body_profile tool now. Set part=chest, max_weight=120."}))
+        a, s, t = await collect(ws, timeout=20, max_msgs=40)
         r("Profile synced", "user:body_profile" in s)
 
     # 5. generate_training_plan
@@ -97,32 +97,32 @@ async def main():
     print("[7/12] record_training_set")
     async with websockets.connect(f"{BASE}/t-rec", open_timeout=20) as ws:
         await ws.recv()
-        await ws.send(json.dumps({"type": "text", "text": "Record bench press set 1, 8 reps, 100kg, RPE 8"}))
-        a, s, t = await collect(ws, timeout=15)
+        await ws.send(json.dumps({"type": "text", "text": "Call record_training_set now. exercise_id=bench_press, set_number=1, reps=8, weight=100."}))
+        a, s, t = await collect(ws, timeout=20, max_msgs=40)
         r("History synced", "user:training_history" in s)
 
     # 8. update_user_preferences
     print("[8/12] update_user_preferences")
     async with websockets.connect(f"{BASE}/t-pref", open_timeout=20) as ws:
         await ws.recv()
-        await ws.send(json.dumps({"type": "text", "text": "Switch to gentle personality mode"}))
-        a, s, t = await collect(ws, timeout=15)
+        await ws.send(json.dumps({"type": "text", "text": "Call update_user_preferences now. Set personality_mode=gentle."}))
+        a, s, t = await collect(ws, timeout=20, max_msgs=40)
         r("Prefs synced", "user:preferences" in s)
 
     # 9. send_ui_command
     print("[9/12] send_ui_command")
     async with websockets.connect(f"{BASE}/t-ui", open_timeout=20) as ws:
         await ws.recv()
-        await ws.send(json.dumps({"type": "text", "text": "Switch to dashboard mode"}))
-        a, s, t = await collect(ws, timeout=12)
+        await ws.send(json.dumps({"type": "text", "text": "Call send_ui_command now. command=switch_mode, data_json={\"mode\":\"dashboard\"}"}))
+        a, s, t = await collect(ws, timeout=20, max_msgs=40)
         r("UI command", "ui_command" in s)
 
     # 10. trigger_safety_alert
     print("[10/12] trigger_safety_alert")
     async with websockets.connect(f"{BASE}/t-safe", open_timeout=20) as ws:
         await ws.recv()
-        await ws.send(json.dumps({"type": "text", "text": "Trigger safety alert for barbell stall"}))
-        a, s, t = await collect(ws, timeout=12)
+        await ws.send(json.dumps({"type": "text", "text": "Call trigger_safety_alert now. alert_type=barbell_stall, countdown_seconds=10."}))
+        a, s, t = await collect(ws, timeout=20, max_msgs=40)
         ui = s.get("ui_command", {})
         r("Safety alert", "ui_command" in s, str(ui.get("command", "")))
 
@@ -130,8 +130,8 @@ async def main():
     print("[11/12] cancel_safety_alert")
     async with websockets.connect(f"{BASE}/t-cancel", open_timeout=20) as ws:
         await ws.recv()
-        await ws.send(json.dumps({"type": "text", "text": "Cancel the safety alert"}))
-        a, s, t = await collect(ws, timeout=12)
+        await ws.send(json.dumps({"type": "text", "text": "Call cancel_safety_alert now."}))
+        a, s, t = await collect(ws, timeout=20, max_msgs=40)
         ui = s.get("ui_command", {})
         r("Cancel alert", "ui_command" in s, str(ui.get("command", "")))
 

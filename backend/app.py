@@ -19,12 +19,17 @@ from sessions.firestore_session_service import FirestoreSessionService
 from google.genai import types
 
 from agents.main_agent import root_agent
+from agents import main_agent as tools_module
+from agents.tool_router import ToolRouter
 from config.defaults import DEFAULT_PREFERENCES
 from config.exercise_library import EXERCISE_LIBRARY
 
 # Global WebSocket registry for tools to push data directly
 # (Live mode state_delta doesn't propagate tool state changes)
 WS_REGISTRY: dict[str, WebSocket] = {}
+
+# Text model router for reliable tool calling
+tool_router = ToolRouter()
 
 app = FastAPI()
 
@@ -53,6 +58,59 @@ UI_COMMAND_MAP = {
     "analyze_posture": "show_posture_report",
     "send_ui_command": None,  # handled specially — reads command from args
 }
+
+
+async def _route_and_execute(user_text: str, session, websocket: WebSocket):
+    """Use text model to route user intent → execute tool directly.
+
+    This runs in parallel with the Live API voice response.
+    The text model (gemini-2.5-flash) is ~95% reliable at tool calling,
+    vs ~50% for the native audio preview model.
+    """
+    try:
+        tool_name, tool_args = await tool_router.route(user_text)
+        if not tool_name:
+            return  # No tool needed (casual chat)
+
+        # Build a minimal ToolContext-like object for tool execution
+        # Tools expect ctx.session.state and ctx.session.id/app_name/user_id
+        class _Ctx:
+            def __init__(self, sess):
+                self.session = sess
+        ctx = _Ctx(session)
+
+        # Map tool names to functions
+        TOOL_MAP = {
+            "get_body_profile": tools_module.get_body_profile,
+            "update_body_profile": tools_module.update_body_profile,
+            "get_training_history": tools_module.get_training_history,
+            "record_training_set": tools_module.record_training_set,
+            "generate_training_plan": tools_module.generate_training_plan,
+            "trigger_safety_alert": tools_module.trigger_safety_alert,
+            "cancel_safety_alert": tools_module.cancel_safety_alert,
+            "get_user_preferences": tools_module.get_user_preferences,
+            "update_user_preferences": tools_module.update_user_preferences,
+            "get_exercise_info": tools_module.get_exercise_info,
+            "analyze_posture": tools_module.analyze_posture,
+            "send_ui_command": tools_module.send_ui_command,
+        }
+
+        func = TOOL_MAP.get(tool_name)
+        if not func:
+            print(f"[Router] Unknown tool: {tool_name}")
+            return
+
+        # Filter args: remove empty/None values, pass only what the function accepts
+        clean_args = {k: v for k, v in (tool_args or {}).items() if v is not None and v != ""}
+
+        # Execute tool
+        result = func(ctx, **clean_args)
+        print(f"[Router] Executed {tool_name} → {str(result)[:80]}")
+
+    except Exception as e:
+        print(f"[Router] Execute error: {e}")
+        import traceback as tb
+        tb.print_exc()
 
 
 @app.get("/health")
@@ -227,10 +285,18 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                     print(f"[WS] Audio sample rate: {audio_sample_rate}Hz")
 
                 elif msg["type"] == "text":
-                    # Text input → send as turn-by-turn content
+                    user_text = msg["text"]
+
+                    # Dual model: text model routes tool calls (reliable),
+                    # audio model handles voice response (personality).
+                    asyncio.create_task(
+                        _route_and_execute(user_text, session, websocket)
+                    )
+
+                    # Also send to Live API for voice response
                     live_queue.send_content(types.Content(
                         role="user",
-                        parts=[types.Part(text=msg["text"])],
+                        parts=[types.Part(text=user_text)],
                     ))
 
                 elif msg["type"] == "cv_event":
