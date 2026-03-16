@@ -1,4 +1,7 @@
-"""MuscleClaw ADK Agent — SequentialAgent workflow architecture."""
+"""MuscleClaw ADK Agent — SequentialAgent workflow architecture.
+
+All prompts and tool responses in English (Gemini competition requirement).
+"""
 import json
 import uuid
 from datetime import datetime, timezone
@@ -11,20 +14,29 @@ from config.exercise_library import EXERCISE_LIBRARY
 
 
 # ══════════════════════════════════════════════════════════════════
-# TOOLS — shared across agents (each agent only gets what it needs)
+# TOOLS
 # ══════════════════════════════════════════════════════════════════
 
-def get_body_profile(ctx: ToolContext) -> dict:
-    """获取用户六大身体部位的力量数据和恢复状态。"""
-    return ctx.session.state.get("user:body_profile", DEFAULT_BODY_PROFILE)
+def get_body_profile(ctx: ToolContext) -> str:
+    """Get user's 6 muscle group strength data and recovery status. Returns a human-readable summary."""
+    profile = ctx.session.state.get("user:body_profile", DEFAULT_BODY_PROFILE)
+    lines = []
+    for part, data in profile.items():
+        ex = data.get("exercise", "unknown")
+        mw = data.get("max_weight", 0)
+        status = data.get("recovery_status", "unknown")
+        last = data.get("last_trained", "never")
+        rec_h = data.get("recovery_hours", 0)
+        lines.append(f"{part}: {ex} PR {mw}kg, status={status}, last_trained={last}, recovery_hours={rec_h}")
+    return "\n".join(lines)
 
 
 def update_body_profile(ctx: ToolContext, part: str, max_weight: float = 0,
                         last_trained: str = "", notes: str = "") -> str:
-    """更新某个身体部位的数据。part: chest|shoulders|back|legs|core|arms"""
+    """Update a muscle group's data. part: chest|shoulders|back|legs|core|arms"""
     profile = ctx.session.state.get("user:body_profile", DEFAULT_BODY_PROFILE.copy())
     if part not in profile:
-        return f"未知部位: {part}"
+        return f"Unknown body part: {part}"
     if max_weight > 0 and max_weight > profile[part].get("max_weight", 0):
         profile[part]["max_weight"] = max_weight
     if last_trained:
@@ -33,11 +45,11 @@ def update_body_profile(ctx: ToolContext, part: str, max_weight: float = 0,
     if notes:
         profile[part]["notes"] = notes
     ctx.session.state["user:body_profile"] = profile
-    return f"已更新 {part}: max_weight={profile[part]['max_weight']}kg"
+    return f"Updated {part}: max_weight={profile[part]['max_weight']}kg"
 
 
-def get_training_history(ctx: ToolContext, days: int = 30, exercise_id: str = "") -> dict:
-    """获取最近N天训练记录。exercise_id留空则返回全部。"""
+def get_training_history(ctx: ToolContext, days: int = 30, exercise_id: str = "") -> str:
+    """Get recent training records. Returns human-readable summary. exercise_id: filter by exercise."""
     history = ctx.session.state.get("user:training_history", [])
     if exercise_id:
         filtered = []
@@ -46,14 +58,28 @@ def get_training_history(ctx: ToolContext, days: int = 30, exercise_id: str = ""
             if matching:
                 filtered.append({**session, "exercises": matching})
         history = filtered
-    return {"sessions": history[-50:], "total": len(history)}
+
+    if not history:
+        return "No training history found."
+
+    lines = [f"Found {len(history)} sessions:"]
+    for s in history[-10:]:
+        date = s.get("date", "?")
+        exs = s.get("exercises", [])
+        for ex in exs:
+            eid = ex.get("exercise_id", "?")
+            sets = ex.get("sets", [])
+            max_w = max((st.get("weight", 0) for st in sets), default=0)
+            total_reps = sum(st.get("reps", 0) for st in sets)
+            lines.append(f"  {date}: {eid} - {len(sets)} sets, max {max_w}kg, total {total_reps} reps")
+    return "\n".join(lines)
 
 
 def record_training_set(ctx: ToolContext, exercise_id: str, set_number: int,
                         reps: int, weight: float, rpe: float = 0,
                         rom_avg_degrees: float = 0,
                         symmetry_score: float = 0) -> str:
-    """记录一组训练数据。"""
+    """Record one training set."""
     history = ctx.session.state.get("user:training_history", [])
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
@@ -84,12 +110,12 @@ def record_training_set(ctx: ToolContext, exercise_id: str, set_number: int,
     })
     ctx.session.state["user:training_history"] = history
 
-    ex_name = EXERCISE_LIBRARY.get(exercise_id, {}).get("name", exercise_id)
-    return f"已记录: {ex_name} 第{set_number}组 {weight}kg×{reps}"
+    ex_name = EXERCISE_LIBRARY.get(exercise_id, {}).get("name_en", exercise_id)
+    return f"Recorded: {ex_name} set {set_number}, {weight}kg x {reps} reps"
 
 
-def generate_training_plan(ctx: ToolContext, target_parts: str = "") -> dict:
-    """基于身体档案生成训练计划。target_parts: 逗号分隔的部位如'chest,shoulders'。留空则自动推荐已恢复部位。"""
+def generate_training_plan(ctx: ToolContext, target_parts: str = "") -> str:
+    """Generate a training plan based on body profile. target_parts: comma-separated like 'chest,back'. Leave empty for auto-recommendation."""
     profile = ctx.session.state.get("user:body_profile", DEFAULT_BODY_PROFILE)
 
     parts = [p.strip() for p in target_parts.split(",") if p.strip()] if target_parts else []
@@ -99,15 +125,17 @@ def generate_training_plan(ctx: ToolContext, target_parts: str = "") -> dict:
             parts = ["chest", "back"]
 
     exercises = []
+    lines = [f"Training plan for: {', '.join(parts)}"]
     for part in parts:
         ex_id = profile.get(part, {}).get("exercise", "bench_press")
         max_w = profile.get(part, {}).get("max_weight", 0)
         target_w = round(max_w * 0.85, 1) if max_w > 0 else 20
         ex_info = EXERCISE_LIBRARY.get(ex_id, {})
+        ex_name = ex_info.get("name_en", ex_id)
         exercises.append({
             "exercise_id": ex_id,
             "name": ex_info.get("name", ex_id),
-            "name_en": ex_info.get("name_en", ""),
+            "name_en": ex_name,
             "primary_muscles": ex_info.get("primary_muscles", [part]),
             "secondary_muscles": ex_info.get("secondary_muscles", []),
             "target_sets": 4,
@@ -115,32 +143,34 @@ def generate_training_plan(ctx: ToolContext, target_parts: str = "") -> dict:
             "target_weight": target_w,
             "completed_sets": 0,
         })
+        lines.append(f"  {ex_name}: 4 sets x 6 reps @ {target_w}kg (85% of {max_w}kg PR)")
 
     plan = {"target_parts": parts, "exercises": exercises}
     ctx.session.state["current_plan"] = plan
-    return plan
+    return "\n".join(lines)
 
 
 def trigger_safety_alert(ctx: ToolContext, alert_type: str, countdown_seconds: int = 10) -> str:
-    """触发安全警报。alert_type: barbell_stall|body_collapse|unresponsive"""
+    """Trigger safety alert. alert_type: barbell_stall|body_collapse|unresponsive"""
     ctx.session.state["safety_alert_active"] = True
     ctx.session.state["safety_countdown"] = countdown_seconds
     prefs = ctx.session.state.get("user:preferences", DEFAULT_PREFERENCES)
     contact = prefs.get("emergency_contact", "")
     if not contact:
-        return f"安全警报已触发({alert_type})，{countdown_seconds}秒倒计时。注意：未设置紧急联系人！"
-    return f"安全警报已触发({alert_type})，{countdown_seconds}秒后拨打 {contact}"
+        return f"SAFETY ALERT triggered ({alert_type}), {countdown_seconds}s countdown. WARNING: No emergency contact set!"
+    return f"SAFETY ALERT triggered ({alert_type}), calling {contact} in {countdown_seconds}s"
 
 
 def cancel_safety_alert(ctx: ToolContext) -> str:
-    """取消安全警报。"""
+    """Cancel active safety alert."""
     ctx.session.state["safety_alert_active"] = False
-    return "安全警报已取消"
+    return "Safety alert cancelled."
 
 
-def get_user_preferences(ctx: ToolContext) -> dict:
-    """获取用户偏好设置。"""
-    return ctx.session.state.get("user:preferences", DEFAULT_PREFERENCES)
+def get_user_preferences(ctx: ToolContext) -> str:
+    """Get user preferences (personality, language, emergency contact, etc.)."""
+    prefs = ctx.session.state.get("user:preferences", DEFAULT_PREFERENCES)
+    return f"personality={prefs.get('personality_mode')}, voice={prefs.get('voice_name')}, contact={prefs.get('emergency_contact','none')}, rest={prefs.get('rest_timer_seconds',120)}s"
 
 
 def update_user_preferences(ctx: ToolContext, personality_mode: str = "",
@@ -148,93 +178,84 @@ def update_user_preferences(ctx: ToolContext, personality_mode: str = "",
                             emergency_contact: str = "",
                             rest_timer_seconds: int = 0,
                             safety_sensitivity: str = "") -> str:
-    """更新用户偏好。只传需要修改的字段。personality_mode: professional|gentle|trash_talk"""
+    """Update user preferences. Only pass fields you want to change. personality_mode: professional|gentle|trash_talk"""
     prefs = ctx.session.state.get("user:preferences", DEFAULT_PREFERENCES.copy())
     updated = []
     if personality_mode:
         prefs["personality_mode"] = personality_mode
         prefs["voice_name"] = VOICE_MAP.get(personality_mode, "Charon")
-        updated.append("personality_mode")
+        updated.append(f"personality={personality_mode}")
     if language:
         prefs["language"] = language
-        updated.append("language")
+        updated.append(f"language={language}")
     if emergency_contact:
         prefs["emergency_contact"] = emergency_contact
         updated.append("emergency_contact")
     if rest_timer_seconds > 0:
         prefs["rest_timer_seconds"] = rest_timer_seconds
-        updated.append("rest_timer_seconds")
+        updated.append(f"rest_timer={rest_timer_seconds}s")
     if safety_sensitivity:
         prefs["safety_sensitivity"] = safety_sensitivity
-        updated.append("safety_sensitivity")
+        updated.append(f"safety={safety_sensitivity}")
     ctx.session.state["user:preferences"] = prefs
-    return f"偏好已更新: {updated}" if updated else "没有需要更新的字段"
+    return f"Preferences updated: {', '.join(updated)}" if updated else "No changes."
 
 
-def get_exercise_info(ctx: ToolContext, exercise_id: str) -> dict:
-    """获取动作定义（关节追踪、角度阈值、安全规则）。"""
-    return EXERCISE_LIBRARY.get(exercise_id, {"error": f"未知动作: {exercise_id}"})
+def get_exercise_info(ctx: ToolContext, exercise_id: str) -> str:
+    """Get exercise definition (joints, angle thresholds, safety rules)."""
+    info = EXERCISE_LIBRARY.get(exercise_id, None)
+    if not info:
+        return f"Unknown exercise: {exercise_id}"
+    return f"{info.get('name_en', exercise_id)}: joints={info.get('tracked_joints')}, ROM={info.get('rom_threshold')}, primary={info.get('primary_muscles')}"
 
 
 def analyze_posture(ctx: ToolContext, shoulder_tilt_degrees: float = 0,
                     pelvis_tilt_degrees: float = 0,
                     spine_curvature: str = "",
                     head_forward_cm: float = 0,
-                    notes: str = "") -> dict:
-    """分析用户体态并生成报告。"""
+                    notes: str = "") -> str:
+    """Analyze user posture and generate report."""
     issues = []
     if abs(shoulder_tilt_degrees) > 3:
-        side = "右" if shoulder_tilt_degrees > 0 else "左"
-        issues.append({
-            "type": "shoulder_imbalance",
-            "severity": "warning" if abs(shoulder_tilt_degrees) < 8 else "concern",
-            "detail": f"{side}肩偏高 {abs(shoulder_tilt_degrees):.1f}°",
-        })
+        side = "right" if shoulder_tilt_degrees > 0 else "left"
+        issues.append(f"{side} shoulder elevated {abs(shoulder_tilt_degrees):.1f} degrees")
     if pelvis_tilt_degrees > 15:
-        issues.append({
-            "type": "anterior_pelvic_tilt",
-            "severity": "warning" if pelvis_tilt_degrees < 25 else "concern",
-            "detail": f"骨盆前倾 {pelvis_tilt_degrees:.1f}°",
-        })
+        issues.append(f"anterior pelvic tilt {pelvis_tilt_degrees:.1f} degrees")
     if head_forward_cm > 3:
-        issues.append({
-            "type": "forward_head",
-            "severity": "warning" if head_forward_cm < 6 else "concern",
-            "detail": f"头部前移 {head_forward_cm:.1f}cm",
-        })
+        issues.append(f"forward head posture {head_forward_cm:.1f}cm")
     if spine_curvature:
-        issues.append({
-            "type": "scoliosis",
-            "severity": "concern",
-            "detail": f"脊柱侧弯: {spine_curvature}",
-        })
+        issues.append(f"spinal curvature: {spine_curvature}")
 
+    severity = "good" if not issues else ("needs attention" if len(issues) <= 2 else "consult a specialist")
     report = {
         "issues": issues,
         "issue_count": len(issues),
-        "overall": "良好" if len(issues) == 0 else ("需注意" if len(issues) <= 2 else "建议就医检查"),
+        "overall": severity,
     }
     if notes:
         report["notes"] = notes
     ctx.session.state["user:posture_report"] = report
-    return report
+
+    if not issues:
+        return "Posture analysis: Good. No significant issues detected."
+    return f"Posture analysis: {severity}. Issues found: {'; '.join(issues)}"
 
 
 def send_ui_command(ctx: ToolContext, command: str, data_json: str = "") -> str:
-    """发送 UI 指令给前端。
-    command: show_body_panel|show_training_plan|show_posture_report|start_rest_timer|switch_mode
-    data_json: JSON 格式的数据负载
+    """Send UI command to frontend.
+    command: switch_mode|show_body_panel|start_rest_timer
+    data_json: JSON payload like '{"mode": "dashboard"}' or '{"seconds": 120}'
     """
     parsed_data = {}
     if data_json:
         try:
             parsed_data = json.loads(data_json)
         except json.JSONDecodeError:
-            return f"data_json 解析失败: {data_json}"
+            return f"Invalid JSON: {data_json}"
     ctx.session.state["temp:last_ui_command"] = {
         "command": command, "data": parsed_data,
     }
-    return f"UI 指令已发送: {command}"
+    return f"UI command sent: {command}"
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -242,18 +263,18 @@ def send_ui_command(ctx: ToolContext, command: str, data_json: str = "") -> str:
 # ══════════════════════════════════════════════════════════════════
 
 def save_plan_review(ctx: ToolContext, summary: str) -> str:
-    """保存恢复状态分析结果。summary: 对每个部位恢复状态的文字描述。"""
+    """Save the recovery analysis summary. summary: text describing each body part's recovery status."""
     ctx.session.state["plan_review"] = summary
     ctx.session.state["temp:workflow_step"] = {"step": "review", "status": "done"}
-    return "已保存分析结果"
+    return "Recovery analysis saved."
 
 
 def save_plan_recommendation(ctx: ToolContext, target_parts: str, reasoning: str) -> str:
-    """保存用户确认的训练部位。target_parts: 逗号分隔如 'chest,back'。reasoning: 推荐原因。"""
+    """Save user-confirmed training parts. target_parts: comma-separated like 'chest,back'. reasoning: why these parts."""
     ctx.session.state["plan_recommendation"] = target_parts
     ctx.session.state["plan_reasoning"] = reasoning
     ctx.session.state["temp:workflow_step"] = {"step": "recommend", "status": "done"}
-    return f"已确认训练部位: {target_parts}"
+    return f"Confirmed target parts: {target_parts}"
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -265,16 +286,20 @@ LIVE_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025"
 step_review = Agent(
     name="step_review",
     model=LIVE_MODEL,
-    instruction="""你是训练状态分析师。你的任务是查看用户的身体恢复状态。
+    instruction="""You are a Recovery Analyst. Your job is to check the user's body recovery status and report it conversationally.
 
-步骤（必须按顺序执行）：
-1. 调用 get_body_profile 获取六个部位的恢复数据
-2. 调用 get_training_history 获取最近7天训练记录
-3. 用中文语音逐一汇报每个部位的状态（恢复百分比、上次训练时间、最大重量）
-4. 调用 save_plan_review 保存你的分析摘要（一段文字总结所有部位状态）
+Steps (execute in order):
+1. Call send_ui_command with command="switch_mode" and data_json='{"mode":"dashboard"}' to show the dashboard.
+2. Say: "Let me check your recovery status..."
+3. Call get_body_profile to read all 6 muscle groups.
+4. Call get_training_history to see recent sessions.
+5. Summarize recovery status NATURALLY in conversation — DO NOT read raw data. Example:
+   "Your chest is fully recovered from 3 days ago, good to go. Back hasn't been trained in 5 days, definitely ready. Shoulders were hit yesterday, still recovering — I'd skip those today."
+   Keep it casual and conversational, like talking to a friend. Mention only the important parts, skip obvious ones.
+6. Call save_plan_review with a text summary of all parts.
 
-语音风格：简洁专业，每个部位一句话。语言：必须使用中文。""",
-    tools=[get_body_profile, get_training_history, save_plan_review],
+IMPORTANT: Speak in English only. Be concise — max 3-4 sentences total. Do NOT list every field from the data.""",
+    tools=[get_body_profile, get_training_history, save_plan_review, send_ui_command],
     disallow_transfer_to_parent=True,
     disallow_transfer_to_peers=True,
 )
@@ -282,20 +307,22 @@ step_review = Agent(
 step_recommend = Agent(
     name="step_recommend",
     model=LIVE_MODEL,
-    instruction="""你是训练规划顾问。基于上一步的分析，推荐今日训练部位。
+    instruction="""You are a Training Advisor. Based on the previous recovery analysis, recommend today's muscle groups.
 
-你可以从 session state 中读取 plan_review 获取分析摘要。
+You can read session state key "plan_review" for the analysis summary.
 
-步骤（必须按顺序执行）：
-1. 语音说出你推荐的训练部位（选已恢复的部位）
-2. 说明推荐原因（哪些已恢复、哪些是弱项需加强、哪些还在恢复中应避免）
-3. 问用户："这样安排可以吗？想加或减什么部位？"
-4. 等待用户语音回复
-5. 根据用户回复调整推荐
-6. 调用 save_plan_recommendation 保存确认的部位和原因
+Steps:
+1. Recommend which muscle groups to train today, and explain WHY:
+   - Which parts are recovered and ready
+   - Which parts are weak points that need extra work
+   - Which parts are still recovering and should be avoided
+   Example: "Based on your recovery, I recommend chest and back today. Chest has fully recovered and is in the supercompensation window. Back is your relative weak point, so extra work will help balance your physique."
+2. Ask the user: "Does that sound good? Want to add or swap anything?"
+3. WAIT for the user to respond via voice. Do NOT proceed without confirmation.
+4. After user confirms (or adjusts), call save_plan_recommendation with the final parts.
 
-注意：必须等用户确认后才能完成。不要替用户做决定。
-语言：必须使用中文。""",
+IMPORTANT: You MUST wait for user input before completing. Do not decide for the user.
+Language: English only.""",
     tools=[save_plan_recommendation],
     disallow_transfer_to_parent=True,
     disallow_transfer_to_peers=True,
@@ -304,30 +331,31 @@ step_recommend = Agent(
 step_generate = Agent(
     name="step_generate",
     model=LIVE_MODEL,
-    instruction="""你是训练计划生成专家。基于用户确认的部位，生成详细训练计划。
+    instruction="""You are a Training Plan Generator. Create a detailed plan based on user-confirmed muscle groups.
 
-你可以从 session state 中读取：
-- plan_recommendation: 确认的训练部位（逗号分隔）
-- plan_reasoning: 推荐原因
+Read from session state:
+- "plan_recommendation": confirmed target parts (comma-separated)
+- "plan_reasoning": why these parts were chosen
 
-步骤（必须按顺序执行）：
-1. 调用 generate_training_plan 工具，target_parts 设为确认的部位
-2. 语音解释每个动作的选择理由，包括：
-   - 工作重量是PR的70-85%（渐进超负荷原则）
-   - 为什么选这个组数和次数
-   - 恢复时间的科学依据
-3. 调用 send_ui_command，command设为"switch_mode"，data_json设为'{"mode":"planning"}'
-4. 语音说："计划已生成，看看右边的面板。有什么要调整的吗？"
+Steps:
+1. Call get_body_profile to get each part's PR weights.
+2. Call get_training_history to check recent performance trends.
+3. Call generate_training_plan with the confirmed target_parts.
+4. Explain your plan with scientific rationale. Example:
+   "Looking at your history, your bench press has been progressing nicely — 100, 105, 110kg over the last 3 sessions. Following progressive overload, today we'll work at 85% of your PR, so 93kg for 4 sets of 6. This targets the hypertrophy-strength sweet spot while keeping volume manageable."
+   Reference REAL numbers from the data. Mention at least one training principle (progressive overload, volume landmarks, RPE, recovery window).
+5. Call send_ui_command with command="switch_mode" and data_json='{"mode":"planning"}' to show the plan.
+6. Say: "Your plan is ready — check the panel on the right. Want to adjust anything?"
 
-语言：必须使用中文。""",
-    tools=[generate_training_plan, send_ui_command],
+Language: English only. Sound like an expert coach, not a textbook.""",
+    tools=[generate_training_plan, get_body_profile, get_training_history, send_ui_command],
     disallow_transfer_to_parent=True,
     disallow_transfer_to_peers=True,
 )
 
 training_plan_workflow = SequentialAgent(
     name="training_plan_workflow",
-    description="多步骤训练计划生成工作流。先分析恢复状态，然后推荐训练部位并和用户确认，最后生成详细计划。当用户说'制定训练计划'或'今天练什么'时使用。",
+    description="Multi-step training plan generation workflow. Analyzes recovery, recommends muscle groups with user confirmation, then generates a detailed plan with scientific rationale. Use when user says 'create a training plan', 'what should I train today', etc.",
     sub_agents=[step_review, step_recommend, step_generate],
 )
 
@@ -336,47 +364,52 @@ training_plan_workflow = SequentialAgent(
 # ROOT AGENT — general conversation + workflow delegation
 # ══════════════════════════════════════════════════════════════════
 
-SYSTEM_INSTRUCTION = """你是 MuscleClaw，一个像贾维斯一样的 AI 健身教练。
+SYSTEM_INSTRUCTION = """You are MuscleClaw, a Jarvis-like AI fitness coach with personality.
 
-## 语言规则（最高优先级）
-- 你必须始终使用中文（普通话）回复，包括语音输出
-- 绝对不要使用英语、德语或其他外语回复
-- 唯一例外：用户主动用英文对话时，可以用英文回复
+## Language (HIGHEST PRIORITY)
+- ALWAYS speak English. Never use Chinese, German, or any other language.
+- All voice output must be in English.
 
-## 训练计划工作流
-当用户要求生成训练计划时（"帮我制定训练计划"、"今天练什么"、"制定xx计划"等），
-你必须 transfer 到 training_plan_workflow。
-不要自己尝试回答训练计划相关的问题，交给专门的工作流处理。
-工作流会自动完成：分析恢复状态 → 推荐部位 → 和用户确认 → 生成计划。
+## Training Plan Workflow
+When the user asks to create a training plan ("create a training plan", "what should I train today", "make me a chest plan", etc.),
+you MUST transfer to training_plan_workflow.
+Do NOT try to generate plans yourself — the workflow handles it automatically:
+analyze recovery → recommend parts → get user confirmation → generate plan.
 
-## 核心能力
-- 你能收到前端 CV 引擎的精确分析事件（标记为 [CV]）
-- 你有持久记忆，记得用户的所有训练历史和身体数据
+## Personality Modes
+Adjust your tone based on personality_mode preference:
 
-## 性格模式
-根据用户偏好的 personality_mode 调整你的语气：
-- "professional": 专业简洁，像私教一样给指令
-- "gentle": 温柔鼓励，耐心引导
-- "trash_talk": 搞笑嘲讽激将法！这是默认模式。你会说：
-  - rep不算时："嗯嗯不算！手不够直你在逗我？"
-  - 鼓励时："行啊兄弟！轻重量宝贝儿！"
-  - 偷懒时："你是在休息还是在度假？"
-  - 完成时："就这？行吧，勉强算你过关。"
+### trash_talk (DEFAULT — this is the star of the show!)
+You're like that gym bro who roasts everyone but gives the best advice. Comedy through contrast.
+- When they show up: "Oh look who decided to grace us with their presence!"
+- Rep counting: "One! Two! Three! Wow, you actually came prepared today?"
+- ROM too short: "Nah nah nah, that doesn't count! My grandma extends further reaching for the remote."
+- Final reps: "Yeah buddy! Light weight baby! COME ON!"
+- Resting too long: "Are you resting or on vacation? Should I book you a flight?"
+- Set done: "That's it? Fine, I'll give you a pass. Add some weight next set."
+- Safety alert: IMMEDIATELY switch to serious: "HOLD UP! Are you okay?!"
+- After safety cancel: "Alright you scared me. Don't do that again — if you die who am I gonna train with?"
+RULE: Every roast MUST be followed by actual coaching advice. Never just mock.
 
-## 对 CV 事件的响应规则
-当你收到标记为 [CV] 的消息时：
-- rep_complete: 报数，如果 ROM 不够就吐槽"不算！"
-- form_issue: 立即语音纠正
-- safety_alert: 立即切换到严肃模式，必要时触发 trigger_safety_alert
-- gesture thumbs_up: 当作用户确认
-- set_complete: 记录数据，开始休息计时
+### gentle
+Warm, encouraging, patient. "Great form! Just extend a tiny bit more... perfect!"
 
-## 你必须做到
-- 永远记住用户的训练数据和偏好（用 get/update 工具）
-- 训练建议基于用户真实数据，不瞎编
-- 安全永远第一优先级
-- 语音要简短有力，像真人教练，不要长篇大论
-- 当用户要求"制定训练计划"时，必须 transfer 到 training_plan_workflow
+### professional
+Clinical, data-driven. "Set 3 complete. Rest 120 seconds. Volume on track."
+
+## CV Event Rules
+When you receive messages tagged [CV]:
+- rep_complete: count it, roast if ROM was bad
+- form_issue: correct immediately ("Left arm is dropping, raise it up!")
+- safety_alert: switch to SERIOUS mode regardless of personality
+- gesture thumbs_up: treat as "yes/confirm"
+- set_complete: record data, start rest timer
+
+## Core Rules
+- Always reference REAL user data from tools, never make up numbers
+- Safety is ALWAYS #1 priority — override personality for emergencies
+- Keep voice responses SHORT and punchy, like a real coach
+- When user asks for a training plan, ALWAYS transfer to training_plan_workflow
 """
 
 root_agent = Agent(
@@ -386,7 +419,7 @@ root_agent = Agent(
     tools=[
         get_body_profile, update_body_profile,
         get_training_history, record_training_set,
-        # generate_training_plan removed — only available in workflow
+        # generate_training_plan removed — only in workflow
         trigger_safety_alert, cancel_safety_alert,
         get_user_preferences, update_user_preferences,
         get_exercise_info,
