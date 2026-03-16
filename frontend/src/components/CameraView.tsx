@@ -47,19 +47,21 @@ export function CameraView() {
         await videoRef.current.play();
       }
 
-      // Audio → WebSocket
-      await audioEngine.startMic((pcm) => adkClient.sendAudio(pcm));
-
-      // WebSocket
+      // WebSocket — connect first, before mic (mic permission may fail)
       adkClient.connect({
         onAudio: (pcm) => audioEngine.playPCM(pcm),
       });
 
-      // Tell backend the actual mic sample rate
-      adkClient.sendJSON({
-        type: 'audio_config',
-        sample_rate: audioEngine.sampleRate,
-      });
+      // Audio → WebSocket (non-blocking: if mic denied, WS still works)
+      try {
+        await audioEngine.startMic((pcm) => adkClient.sendAudio(pcm));
+        adkClient.sendJSON({
+          type: 'audio_config',
+          sample_rate: audioEngine.sampleRate,
+        });
+      } catch (e) {
+        console.warn('[Audio] Mic access denied or failed:', e);
+      }
 
       // Initialize MediaPipe (async, non-blocking)
       initMediaPipe().then(() => {
