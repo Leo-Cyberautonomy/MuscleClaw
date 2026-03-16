@@ -101,13 +101,9 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     })
 
     # Push initial user data to frontend (data layer — MECE)
-    # Read user state directly from Firestore (not via session which is empty)
+    # Use session_service's existing Firestore client (already authenticated)
     try:
-        from google.cloud import firestore as firestore_lib
-        db = firestore_lib.AsyncClient(project="muscleclaw")
-        doc_ref = db.collection("apps").document("muscleclaw") \
-            .collection("users").document(user_id) \
-            .collection("meta").document("user_state")
+        doc_ref = session_service._user_state_ref("muscleclaw", user_id)
         doc = await doc_ref.get()
         if doc.exists:
             user_data = doc.to_dict() or {}
@@ -116,9 +112,9 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                     await websocket.send_json({"type": "state_sync", "key": f"user:{key}", "data": val})
                     print(f"[WS] Initial push: user:{key}")
         else:
-            print(f"[WS] No user state in Firestore for {user_id[:12]}")
+            print(f"[WS] No user state for {user_id[:12]}")
     except Exception as e:
-        print(f"[WS] Initial state push failed: {e}")
+        print(f"[WS] Initial push failed: {e}")
 
     # Background task: consume events from run_live → forward to WebSocket
     # With auto-retry on transient Gemini API errors (1008, etc.)
