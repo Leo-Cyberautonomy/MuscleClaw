@@ -180,7 +180,7 @@ def manage_training(ctx: ToolContext, action: str, data_json: str = "") -> str:
         return _modify_plan(ctx, data_json)
 
     elif action == "read_plan":
-        plan = ctx.session.state.get("current_plan")
+        plan = ctx.session.state.get("current_plan") or ctx.session.state.get("user:current_plan")
         if not plan:
             return "No current plan."
         _push_to_frontend(ctx, "current_plan", plan)
@@ -194,7 +194,7 @@ def manage_training(ctx: ToolContext, action: str, data_json: str = "") -> str:
 
 def _start_session(ctx) -> str:
     """Start a training session from the current plan."""
-    plan = ctx.session.state.get("current_plan")
+    plan = ctx.session.state.get("current_plan") or ctx.session.state.get("user:current_plan")
 
     if not plan or not plan.get("exercises"):
         # No plan → generate one first, show it in planning mode
@@ -254,8 +254,13 @@ def _generate_plan(ctx, data_json: str) -> str:
             mw = max((st.get("weight", 0) for st in sets), default=0)
             history_lines.append(f"{s.get('date','?')}: {ex.get('exercise_id','?')} {len(sets)} sets, max {mw}kg")
 
-    exercises_avail = [f"{eid}: {info.get('name_en', eid)} ({info.get('name', '')}), primary={info.get('primary_muscles')}"
-                       for eid, info in EXERCISE_LIBRARY.items()]
+    # Filter exercises to only those matching target muscles
+    target_set = set(parts)
+    exercises_avail = []
+    for eid, info in EXERCISE_LIBRARY.items():
+        primary = set(info.get('primary_muscles', []))
+        if primary & target_set:  # At least one primary muscle matches target
+            exercises_avail.append(f"{eid}: {info.get('name_en', eid)}, primary={info.get('primary_muscles')}, secondary={info.get('secondary_muscles', [])}")
 
     prompt = f"""You are an expert strength coach. Generate a training plan for today.
 
@@ -273,10 +278,11 @@ AVAILABLE EXERCISES:
 TRAINING SCIENCE PRINCIPLES (apply these):
 
 1. EXERCISE SELECTION (MUST include 3-4 exercises, never less than 3)
-   - Start with the primary compound for each target muscle
-   - Add a secondary compound or variation
-   - Finish with 1 isolation or accessory movement
-   - Example for chest+back: bench_press → barbell_row → deadlift → barbell_curl
+   - ONLY use exercises from the AVAILABLE list below (already filtered for target muscles)
+   - Start with the primary compound for each target muscle group
+   - Add a secondary compound or variation for the same muscles
+   - Finish with 1 isolation or accessory
+   - Every exercise's primary_muscles MUST overlap with the TARGET MUSCLE GROUPS
 
 2. PROGRESSIVE OVERLOAD
    - Working weight = 75-85% of PR for strength (3-6 reps)
@@ -335,7 +341,9 @@ JSON FORMAT (example with 3 exercises):
         plan = {"target_parts": parts, "exercises": exercises}
 
     ctx.session.state["current_plan"] = plan
+    ctx.session.state["user:current_plan"] = plan
     _push_to_frontend(ctx, "current_plan", plan)
+    _push_to_frontend(ctx, "user:current_plan", plan)
     lines = [f"Plan: {', '.join(plan.get('target_parts', parts))}"]
     for ex in plan.get("exercises", []):
         lines.append(f"  {ex.get('name_en','?')}: {ex.get('target_sets',4)}x{ex.get('target_reps',6)} @ {ex.get('target_weight',0)}kg")
