@@ -11,7 +11,7 @@ import { checkSymmetry } from '../cv/symmetryChecker';
 import { feedFrame as feedPosture, analyzePosture } from '../cv/postureScanner';
 import { checkSafety } from '../cv/safetyMonitor';
 import { processAirTouch } from '../cv/airTouch';
-import { detectGesture } from '../cv/gestureDetector';
+// import { detectGesture } from '../cv/gestureDetector'; // Disabled — caused AI spam
 import { drawSkeleton } from '../render/skeleton';
 import { drawAngle } from '../render/angles';
 import { POSE } from '../cv/types';
@@ -269,14 +269,10 @@ export function CameraView() {
               }
             }
           } else {
-            // Hand detection for gestures + air touch
+            // Hand detection for air touch only (gestures disabled — caused AI spam)
             const hands = detectHands(video, timestamp);
             if (hands && hands.length > 0) {
               usePoseStore.getState().setHandLandmarks(hands);
-              const gestureEvent = detectGesture(hands);
-              if (gestureEvent) {
-                adkClient.sendCVEvent(gestureEvent);
-              }
               // Air Touch: map finger position to screen cursor
               processAirTouch(hands, canvas.width, canvas.height, canvas.getBoundingClientRect());
             } else {
