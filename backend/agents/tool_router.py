@@ -10,13 +10,13 @@ from google.genai import types
 TOOL_DECLARATIONS = [
     types.FunctionDeclaration(
         name="manage_profile",
-        description="Read or write body profile data (6 muscle groups: chest, shoulders, back, legs, core, arms). Use 'read' to check recovery status, 'write' to update PR weights or training dates.",
+        description="Read/write body profile or posture data. Actions: read (check recovery), write (update PR/dates), write_posture (save posture analysis).",
         parameters=types.Schema(
             type="OBJECT",
             properties={
-                "action": types.Schema(type="STRING", description="read or write"),
-                "part": types.Schema(type="STRING", description="all, chest, shoulders, back, legs, core, or arms"),
-                "data_json": types.Schema(type="STRING", description='JSON for write, e.g. {"max_weight":120,"last_trained":"2026-03-17"}'),
+                "action": types.Schema(type="STRING", description="read, write, or write_posture"),
+                "part": types.Schema(type="STRING", description="all, chest, shoulders, back, legs, core, or arms (for read/write)"),
+                "data_json": types.Schema(type="STRING", description='For write: {"max_weight":120}. For write_posture: {"issues":["right shoulder elevated 5°"],"overall":"needs attention"}'),
             },
             required=["action"],
         ),
@@ -78,22 +78,42 @@ TOOL_DECLARATIONS = [
 
 ROUTER_PROMPT = """You are a tool router for a fitness AI coach. Given a user message, call exactly ONE tool.
 
+AVAILABLE EXERCISE IDs (use these exact strings):
+- bench_press (Bench Press) — chest
+- squat (Squat) — legs
+- deadlift (Deadlift) — back, legs
+- ohp (Overhead Press) — shoulders
+- barbell_row (Barbell Row) — back
+- barbell_curl (Barbell Curl) — arms
+- plank (Plank) — core
+
 ROUTING RULES:
 - "show/check my profile/body/status/recovery" → manage_profile(action="read")
-- "update chest/weight to X" → manage_profile(action="write", part="chest", data_json='{"max_weight":X}')
-- "create/make/generate a plan" → manage_training(action="generate_plan", data_json='{"target_parts":"chest,back"}')
-- "change/modify plan: bench to 90kg" → manage_training(action="modify_plan", data_json='{"modification":"change bench press weight to 90kg"}')
-- "show/read my plan" → manage_training(action="read_plan")
-- "record set: bench 100kg 8 reps" → manage_training(action="write_set", data_json='{"exercise_id":"bench_press","set_number":1,"reps":8,"weight":100}')
+- "update chest PR to 120" → manage_profile(action="write", part="chest", data_json='{"max_weight":120}')
+- "create/make a plan" or "what should I train" → manage_training(action="generate_plan", data_json='{"target_parts":"chest,back"}')
+  Extract target muscles from user message. If none specified, leave target_parts empty for auto.
+- "change bench to 90kg" or "add squat to plan" → manage_training(action="modify_plan", data_json='{"modification":"<exact user request>"}')
+- "show my plan" → manage_training(action="read_plan")
+- "record bench press 100kg 8 reps" → manage_training(action="write_set", data_json='{"exercise_id":"bench_press","reps":8,"weight":100}')
+  Map exercise names to exercise_id from the list above.
 - "show training history" → manage_training(action="read_history")
-- "switch to gentle/trash talk/pro" → manage_preferences(action="write", data_json='{"personality_mode":"gentle"}')
-- "set rest timer to 90s" → manage_preferences(action="write", data_json='{"rest_timer_seconds":90}')
-- "show dashboard/plan/training" → ui_navigate(command="switch_mode", data_json='{"mode":"dashboard"}')
-- "trigger/cancel safety alert" → safety_control(action="trigger/cancel")
-- Greetings, chat, questions → no_action()
+- "switch to gentle/trash talk/professional" → manage_preferences(action="write", data_json='{"personality_mode":"gentle"}')
+- "set rest to 90 seconds" → manage_preferences(action="write", data_json='{"rest_timer_seconds":90}')
+- "set emergency contact 999" → manage_preferences(action="write", data_json='{"emergency_contact":"999"}')
+- "show dashboard" → ui_navigate(command="switch_mode", data_json='{"mode":"dashboard"}')
+- "show plan/planning" → ui_navigate(command="switch_mode", data_json='{"mode":"planning"}')
+- "start training" → ui_navigate(command="switch_mode", data_json='{"mode":"training"}')
+- "analyze posture" → manage_profile(action="write_posture", data_json='{"issues":[],"overall":"good"}')
+  Note: actual posture data comes from CV engine, not user text. For now, create empty report.
+- "trigger safety alert" → safety_control(action="trigger", data_json='{"alert_type":"barbell_stall","countdown_seconds":10}')
+- "cancel safety alert" → safety_control(action="cancel")
+- "enter showcase mode" → ui_navigate(command="switch_mode", data_json='{"mode":"showcase"}')
+- Greetings, chat, questions, compliments → no_action()
 
-IMPORTANT: For modify_plan, put the user's exact modification request in data_json.modification field.
-Always call a tool. Never respond with text only."""
+IMPORTANT:
+- For modify_plan, include the user's EXACT request in the modification field.
+- For write_set, always map exercise names to exercise_id (e.g. "bench press" → "bench_press").
+- Always call exactly one tool. Never respond with text only."""
 
 
 class ToolRouter:
