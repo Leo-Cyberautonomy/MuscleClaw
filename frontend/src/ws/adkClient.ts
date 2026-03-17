@@ -76,6 +76,10 @@ class ADKClient {
 
   /** Data layer: backend pushes state changes → update stores */
   private handleStateSync(key: string, data: any) {
+    if (data === null || data === undefined) {
+      console.warn(`[ADK] State sync ${key}: null data, skipping`);
+      return;
+    }
     const app = useAppStore.getState();
     const training = useTrainingStore.getState();
     const pose = usePoseStore.getState();
@@ -87,34 +91,44 @@ class ADKClient {
       case 'user:posture_report': pose.setPostureReport(data); break;
       case 'current_plan': training.setTrainingPlan(data); break;
       case 'temp:workflow_step': training.setWorkflowStep(data); break;
-      case 'ui_command': this.handleUICommand(data.command, data.data); return;
+      case 'ui_command':
+        if (data && data.command) this.handleUICommand(data.command, data.data);
+        return;
     }
     console.log(`[ADK] State sync: ${key}`);
   }
 
   private handleUICommand(command: string, data: any) {
+    if (!command) return;
+    console.log(`[UI] Command: ${command}`, data);
     const app = useAppStore.getState();
     const training = useTrainingStore.getState();
     const ui = useUIStore.getState();
+    const d = data || {};
 
     switch (command) {
-      case 'switch_mode': app.setMode(data.mode); break;
-      case 'show_body_panel': app.setBodyProfile(data.profile); app.setMode('dashboard'); break;
+      case 'switch_mode':
+        if (d.mode) app.setMode(d.mode);
+        break;
+      case 'show_body_panel':
+        if (d.profile) app.setBodyProfile(d.profile);
+        app.setMode('dashboard');
+        break;
       case 'show_training_plan': {
-        // data.plan may be the plan object, or data itself may be the plan
-        const plan = data.plan ?? data;
-        console.log('[UI] Training plan received:', plan);
-        training.setTrainingPlan(plan);
-        app.setMode('planning');
+        const plan = d.plan ?? d;
+        if (plan && plan.exercises) {
+          training.setTrainingPlan(plan);
+          app.setMode('planning');
+        }
         break;
       }
       case 'show_posture_report': app.setMode('posture'); break;
-      case 'show_safety_alert': ui.setSafetyAlert(true, data.countdown_seconds); break;
+      case 'show_safety_alert': ui.setSafetyAlert(true, d.countdown_seconds || 10); break;
       case 'cancel_safety_alert': ui.setSafetyAlert(false); break;
-      case 'start_rest_timer': training.setRestTimer(data.seconds); break;
-      case 'update_set_info': training.updateTraining(data); break;
+      case 'start_rest_timer': if (d.seconds) training.setRestTimer(d.seconds); break;
+      case 'update_set_info': if (d) training.updateTraining(d); break;
     }
-    this.handlers.onUICommand?.(command, data);
+    this.handlers.onUICommand?.(command, d);
   }
 
   /** Queue audio sample rate — sent on WS open or immediately if already open */
