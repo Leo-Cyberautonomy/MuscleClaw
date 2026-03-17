@@ -115,7 +115,6 @@ export function Sidebar() {
   const bodyProfile = useAppStore((s) => s.bodyProfile);
   const transcript = useAppStore((s) => s.transcript);
   const trainingPlan = useTrainingStore((s) => s.trainingPlan);
-  const workflowStep = useTrainingStore((s) => s.workflowStep);
   const training = useTrainingStore();
   const postureReport = usePoseStore((s) => s.postureReport);
   const postureScanning = usePoseStore((s) => s.postureScanning);
@@ -453,8 +452,8 @@ export function Sidebar() {
           </>
         )}
 
-        {/* ═══ PLANNING + TRAINING ═══ */}
-        {(mode === 'planning' || mode === 'training') && (
+        {/* ═══ PLANNING ═══ */}
+        {mode === 'planning' && (
           <>
             {trainingPlan ? (
               <>
@@ -466,129 +465,147 @@ export function Sidebar() {
                   <div key={i} className="stagger">
                     <TrainingPlanCard
                       exercise={ex} index={i}
-                      activeIndex={training.activeExerciseIndex}
-                      currentSet={training.setNumber}
-                      setResults={training.exerciseResults[i] ?? []}
+                      activeIndex={-1}
+                      currentSet={0}
+                      setResults={[]}
                     />
                   </div>
                 ))}
-                {/* Session Metrics */}
-                {mode === 'training' && Object.keys(training.exerciseResults).length > 0 && (() => {
-                  const totalSets = Object.values(training.exerciseResults).reduce((s, r) => s + r.length, 0);
-                  const targetSets = trainingPlan.exercises?.reduce((s: number, e: any) => s + (e.target_sets ?? 4), 0) ?? 0;
-                  const totalVolume = Object.values(training.exerciseResults).reduce((s, sets) => s + sets.reduce((ss, r) => ss + r.weight * r.reps, 0), 0);
-                  const allDone = totalSets >= targetSets && targetSets > 0;
-
-                  return allDone ? (
-                    /* Training Complete Summary */
-                    <div style={{
-                      background: 'linear-gradient(135deg, #34C759, #30D158)',
-                      borderRadius: 'var(--radius-card)', padding: 20,
-                      color: '#fff', animation: 'scaleIn 0.5s var(--spring) both',
-                    }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', opacity: .8, textTransform: 'uppercase' }}>
-                        Session Complete
-                      </div>
-                      <div style={{ fontSize: 20, fontWeight: 800, marginTop: 6 }}>
-                        Great workout!
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 14 }}>
-                        <div style={{ textAlign: 'center', padding: 10, background: 'rgba(255,255,255,.15)', borderRadius: 10 }}>
-                          <div style={{ fontSize: 9, opacity: .7, letterSpacing: '.05em', textTransform: 'uppercase' }}>Sets</div>
-                          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 800, marginTop: 2 }}>{totalSets}</div>
-                        </div>
-                        <div style={{ textAlign: 'center', padding: 10, background: 'rgba(255,255,255,.15)', borderRadius: 10 }}>
-                          <div style={{ fontSize: 9, opacity: .7, letterSpacing: '.05em', textTransform: 'uppercase' }}>Volume</div>
-                          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 800, marginTop: 2 }}>{totalVolume.toLocaleString()}kg</div>
-                        </div>
-                      </div>
-                    </div>
-                  ) : null;
-                })()}
-                {mode === 'training' && Object.keys(training.exerciseResults).length > 0 && (
-                  <div style={{
-                    background: 'var(--bg-card)', borderRadius: 'var(--radius-card)',
-                    padding: 16, boxShadow: 'var(--shadow-card)',
-                    display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10,
-                  }}>
-                    {[
-                      { label: 'Sets', value: `${Object.values(training.exerciseResults).reduce((s, r) => s + r.length, 0)}/${trainingPlan.exercises?.reduce((s: number, e: any) => s + (e.target_sets ?? 4), 0) ?? 0}` },
-                      { label: 'Volume', value: `${Object.values(training.exerciseResults).reduce((s, sets) => s + sets.reduce((ss, r) => ss + r.weight * r.reps, 0), 0).toLocaleString()}kg` },
-                    ].map(({ label, value }) => (
-                      <div key={label} style={{ textAlign: 'center', padding: '10px 0', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-mini)' }}>
-                        <div style={{ fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 600, letterSpacing: '.05em', textTransform: 'uppercase' }}>{label}</div>
-                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 800, marginTop: 2 }}>{value}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            ) : workflowStep ? (
-              /* Workflow progress indicator */
-              <div style={{
-                background: 'var(--bg-card)', borderRadius: 'var(--radius-card)',
-                boxShadow: 'var(--shadow-card)', padding: 18,
-                animation: 'scaleIn 0.4s var(--spring) both',
-              }}>
-                <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>Generating Plan</div>
-                {[
-                  { key: 'review', label: 'Analyzing recovery' },
-                  { key: 'recommend', label: 'Recommending muscles' },
-                  { key: 'generate', label: 'Creating plan' },
-                ].map(({ key, label }) => {
-                  const isDone = (['review', 'recommend', 'generate'].indexOf(key)
-                    < ['review', 'recommend', 'generate'].indexOf(workflowStep.step))
-                    || (workflowStep.step === key && workflowStep.status === 'done');
-                  const isActive = workflowStep.step === key && workflowStep.status !== 'done';
-                  return (
-                    <div key={key} style={{
-                      display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0',
-                      opacity: isDone || isActive ? 1 : 0.4,
-                    }}>
-                      <div style={{
-                        width: 24, height: 24, borderRadius: '50%',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 12, fontWeight: 700,
-                        background: isDone ? '#34c759' : isActive ? 'var(--brand-purple)' : '#e5e5ea',
-                        color: isDone || isActive ? '#fff' : '#8e8e93',
-                        transition: 'all .3s var(--spring)',
-                      }}>
-                        {isDone ? '✓' : isActive ? '•' : '○'}
-                      </div>
-                      <span style={{
-                        fontSize: 13, fontWeight: isActive ? 700 : 500,
-                        color: isActive ? 'var(--text-primary)' : isDone ? '#34c759' : 'var(--text-tertiary)',
-                      }}>
-                        {label}
-                        {isActive && <span style={{ color: 'var(--brand-purple)', marginLeft: 6 }}>in progress...</span>}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div style={{
-                background: 'var(--bg-card)', borderRadius: 'var(--radius-card)',
-                boxShadow: 'var(--shadow-card)', padding: 18,
-              }}>
-                <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 14 }}>
-                  {mode === 'planning'
-                    ? 'Say "create a training plan" or tap below'
-                    : 'Create a training plan first to start training'}
-                </div>
                 <button
-                  onClick={() => adkClient.sendText('Create a training plan for me')}
+                  onClick={() => adkClient.sendText('Start training')}
                   style={{
-                    width: '100%', padding: 12, border: 'none',
-                    borderRadius: 'var(--radius-mini)',
+                    width: '100%', padding: 14, border: 'none',
+                    borderRadius: 'var(--radius-card)',
                     background: 'var(--brand-gradient)',
-                    color: '#fff', fontSize: 14, fontWeight: 700,
+                    color: '#fff', fontSize: 15, fontWeight: 700,
                     cursor: 'pointer', fontFamily: 'var(--font-sans)',
                     boxShadow: 'var(--shadow-brand)',
                     transition: 'all .25s var(--spring)',
                   }}
                 >
+                  Start Training
+                </button>
+              </>
+            ) : (
+              <div style={{ background: 'var(--bg-card)', borderRadius: 'var(--radius-card)', boxShadow: 'var(--shadow-card)', padding: 18 }}>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 14 }}>
+                  Say "create a training plan" or tap below
+                </div>
+                <button onClick={() => adkClient.sendText('Create a training plan for me')}
+                  style={{ width: '100%', padding: 12, border: 'none', borderRadius: 'var(--radius-mini)', background: 'var(--brand-gradient)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-sans)', boxShadow: 'var(--shadow-brand)' }}>
                   Generate Plan
+                </button>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ═══ TRAINING (dedicated UI) ═══ */}
+        {mode === 'training' && (
+          <>
+            {trainingPlan && training.exerciseId ? (() => {
+              const activeIdx = training.activeExerciseIndex >= 0 ? training.activeExerciseIndex : 0;
+              const currentEx = trainingPlan.exercises?.[activeIdx];
+              const totalSets = Object.values(training.exerciseResults).reduce((s: number, r: any[]) => s + r.length, 0);
+              const targetSetsTotal = trainingPlan.exercises?.reduce((s: number, e: any) => s + (e.target_sets ?? 4), 0) ?? 0;
+              const totalVolume = Object.values(training.exerciseResults).reduce((s: number, sets: any[]) => s + sets.reduce((ss: number, r: any) => ss + (r.weight || 0) * (r.reps || 0), 0), 0);
+              const allDone = totalSets >= targetSetsTotal && targetSetsTotal > 0;
+
+              return (
+                <>
+                  {/* Current Exercise Hero */}
+                  {currentEx && !allDone && (
+                    <div style={{
+                      background: 'var(--brand-gradient)', borderRadius: 'var(--radius-card)',
+                      padding: 20, color: '#fff',
+                      boxShadow: 'var(--shadow-brand)',
+                      animation: 'scaleIn 0.4s var(--spring) both',
+                    }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.1em', opacity: .7, textTransform: 'uppercase' }}>
+                        Now Training
+                      </div>
+                      <div style={{ fontSize: 22, fontWeight: 800, marginTop: 6 }}>
+                        {currentEx.name_en || currentEx.name}
+                      </div>
+                      <div style={{ display: 'flex', gap: 16, marginTop: 12 }}>
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: 9, opacity: .6, letterSpacing: '.08em', textTransform: 'uppercase' }}>Set</div>
+                          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 800 }}>
+                            {training.setNumber}/{currentEx.target_sets || 4}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: 9, opacity: .6, letterSpacing: '.08em', textTransform: 'uppercase' }}>Reps</div>
+                          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 800 }}>
+                            {training.reps}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: 9, opacity: .6, letterSpacing: '.08em', textTransform: 'uppercase' }}>Weight</div>
+                          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 800 }}>
+                            {currentEx.target_weight}kg
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Completion card */}
+                  {allDone && (
+                    <div style={{
+                      background: 'linear-gradient(135deg, #34C759, #30D158)',
+                      borderRadius: 'var(--radius-card)', padding: 20,
+                      color: '#fff', animation: 'scaleIn 0.5s var(--spring) both',
+                    }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', opacity: .8, textTransform: 'uppercase' }}>Session Complete</div>
+                      <div style={{ fontSize: 20, fontWeight: 800, marginTop: 6 }}>Great workout!</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 14 }}>
+                        <div style={{ textAlign: 'center', padding: 10, background: 'rgba(255,255,255,.15)', borderRadius: 10 }}>
+                          <div style={{ fontSize: 9, opacity: .7, textTransform: 'uppercase' }}>Sets</div>
+                          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 800, marginTop: 2 }}>{totalSets}</div>
+                        </div>
+                        <div style={{ textAlign: 'center', padding: 10, background: 'rgba(255,255,255,.15)', borderRadius: 10 }}>
+                          <div style={{ fontSize: 9, opacity: .7, textTransform: 'uppercase' }}>Volume</div>
+                          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 800, marginTop: 2 }}>{totalVolume.toLocaleString()}kg</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Session Stats */}
+                  <div style={{
+                    background: 'var(--bg-card)', borderRadius: 'var(--radius-card)',
+                    padding: 16, boxShadow: 'var(--shadow-card)',
+                    display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10,
+                  }}>
+                    <div style={{ textAlign: 'center', padding: '10px 0', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-mini)' }}>
+                      <div style={{ fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 600, letterSpacing: '.05em', textTransform: 'uppercase' }}>Sets</div>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 800, marginTop: 2 }}>{totalSets}/{targetSetsTotal}</div>
+                    </div>
+                    <div style={{ textAlign: 'center', padding: '10px 0', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-mini)' }}>
+                      <div style={{ fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 600, letterSpacing: '.05em', textTransform: 'uppercase' }}>Volume</div>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 800, marginTop: 2 }}>{totalVolume.toLocaleString()}kg</div>
+                    </div>
+                  </div>
+
+                  {/* Exercise List */}
+                  {trainingPlan.exercises?.map((ex: any, i: number) => (
+                    <div key={i} className="stagger">
+                      <TrainingPlanCard exercise={ex} index={i}
+                        activeIndex={activeIdx} currentSet={training.setNumber}
+                        setResults={training.exerciseResults[i] ?? []} />
+                    </div>
+                  ))}
+                </>
+              );
+            })() : (
+              <div style={{ background: 'var(--bg-card)', borderRadius: 'var(--radius-card)', boxShadow: 'var(--shadow-card)', padding: 18 }}>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 14 }}>
+                  Create a plan first, then say "start training"
+                </div>
+                <button onClick={() => adkClient.sendText('Start training')}
+                  style={{ width: '100%', padding: 12, border: 'none', borderRadius: 'var(--radius-mini)', background: 'var(--brand-gradient)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-sans)', boxShadow: 'var(--shadow-brand)' }}>
+                  Start Training
                 </button>
               </div>
             )}
