@@ -16,6 +16,16 @@ class PCMProcessor extends AudioWorkletProcessor {
     const float32 = input[0];
     if (!float32 || float32.length === 0) return true;
 
+    // Silence gate: skip frames below energy threshold to prevent
+    // background noise from triggering Gemini's VAD (voice activity detection),
+    // which causes the model to think the user is interrupting → stops speaking.
+    let energy = 0;
+    for (let i = 0; i < float32.length; i++) {
+      energy += float32[i] * float32[i];
+    }
+    energy /= float32.length;
+    if (energy < 0.0005) return true; // Silent — don't send
+
     // Convert Float32 [-1, 1] → Int16 [-32768, 32767]
     const int16 = new Int16Array(float32.length);
     for (let i = 0; i < float32.length; i++) {

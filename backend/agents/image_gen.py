@@ -30,7 +30,7 @@ async def generate_muscle_image(photo_base64: str) -> str | None:
 
     try:
         response = client.models.generate_content(
-            model="gemini-2.0-flash-exp",
+            model="gemini-2.5-flash-image",
             contents=[
                 types.Content(
                     role="user",

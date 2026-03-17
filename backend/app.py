@@ -225,6 +225,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                     live_request_queue=live_queue,
                     run_config=run_config,
                 ):
+                    # Audio + model transcript output
                     if event.content and event.content.parts:
                         for part in event.content.parts:
                             if (part.inline_data
@@ -232,18 +233,32 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                     and part.inline_data.mime_type.startswith("audio/")):
                                 await websocket.send_bytes(part.inline_data.data)
                             elif part.text and not event.partial:
-                                # Check if this is user input transcription
-                                is_user = event.content.role == "user"
                                 await websocket.send_json({
                                     "type": "transcript",
-                                    "role": "user" if is_user else "model",
+                                    "role": "model",
                                     "text": part.text,
                                 })
-                                # Route user speech through text model for tool calls
-                                if is_user and len(part.text) > 3:
-                                    asyncio.create_task(
-                                        _route_and_execute(part.text, session, websocket)
-                                    )
+
+                    # Input transcription: user speech → text (via ADK event.input_transcription)
+                    # This is the correct way to get user speech in Live mode.
+                    # event.content.role == "user" does NOT work.
+                    if (hasattr(event, 'input_transcription')
+                            and event.input_transcription
+                            and hasattr(event.input_transcription, 'text')
+                            and event.input_transcription.text
+                            and not event.partial):
+                        user_text = event.input_transcription.text.strip()
+                        if len(user_text) > 2:
+                            print(f"[Voice] Transcript: {user_text[:60]}")
+                            await websocket.send_json({
+                                "type": "transcript",
+                                "role": "user",
+                                "text": user_text,
+                            })
+                            # Route through ToolRouter for reliable tool calling
+                            asyncio.create_task(
+                                _route_and_execute(user_text, session, websocket)
+                            )
 
                     # Data layer: push state changes to frontend
                     if event.actions:
