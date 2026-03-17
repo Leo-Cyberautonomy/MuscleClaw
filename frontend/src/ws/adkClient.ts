@@ -90,6 +90,7 @@ class ADKClient {
       case 'user:training_history': training.setTrainingHistory(data); break;
       case 'user:posture_report': pose.setPostureReport(data); break;
       case 'current_plan': training.setTrainingPlan(data); break;
+      case 'training_state': training.updateTraining(data); break;
       case 'temp:workflow_step': training.setWorkflowStep(data); break;
       case 'ui_command':
         if (data && data.command) this.handleUICommand(data.command, data.data);

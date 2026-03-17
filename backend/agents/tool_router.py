@@ -23,12 +23,12 @@ TOOL_DECLARATIONS = [
     ),
     types.FunctionDeclaration(
         name="manage_training",
-        description="Manage training plans and history. Actions: read_history (view past sessions), write_set (record a set), generate_plan (AI creates new plan), modify_plan (change existing plan), read_plan (view current plan).",
+        description="Manage training plans and history. Actions: read_history (view past sessions), write_set (record a set), generate_plan (AI creates new plan), modify_plan (change existing plan), read_plan (view current plan), start_session (begin training from current plan).",
         parameters=types.Schema(
             type="OBJECT",
             properties={
                 "action": types.Schema(type="STRING", description="read_history, write_set, generate_plan, modify_plan, or read_plan"),
-                "data_json": types.Schema(type="STRING", description='JSON varies by action. generate_plan: {"target_parts":"chest,back"}. write_set: {"exercise_id":"bench_press","set_number":1,"reps":8,"weight":100}. modify_plan: {"modification":"change bench press weight to 90kg"}.'),
+                "data_json": types.Schema(type="STRING", description='JSON varies by action. generate_plan: {"target_parts":"chest,back"}. write_set: {"exercise_id":"bench_press","set_number":1,"reps":8,"weight":100}. modify_plan: {"modification":"change bench press weight to 90kg"}. start_session: not needed.'),
             },
             required=["action"],
         ),
@@ -84,6 +84,7 @@ ROUTING RULES:
 - "show my plan" → manage_training(action="read_plan")
 - "record bench press 100kg 8 reps" → manage_training(action="write_set", data_json='{"exercise_id":"bench_press","reps":8,"weight":100}')
   Map exercise names to exercise_id from the list above.
+- "start training" / "let's go" / "begin workout" → manage_training(action="start_session")
 - "show training history" → manage_training(action="read_history")
 - "switch to gentle/trash talk/professional" → manage_preferences(action="write", data_json='{"personality_mode":"gentle"}')
 - "set rest to 90 seconds" → manage_preferences(action="write", data_json='{"rest_timer_seconds":90}')

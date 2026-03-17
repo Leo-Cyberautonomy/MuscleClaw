@@ -170,6 +170,9 @@ def manage_training(ctx: ToolContext, action: str, data_json: str = "") -> str:
         name = EXERCISE_LIBRARY.get(eid, {}).get("name_en", eid)
         return f"Recorded: {name} set {data.get('set_number', '?')}, {data.get('weight', 0)}kg x {data.get('reps', 0)}"
 
+    elif action == "start_session":
+        return _start_session(ctx)
+
     elif action == "generate_plan":
         return _generate_plan(ctx, data_json)
 
@@ -187,6 +190,35 @@ def manage_training(ctx: ToolContext, action: str, data_json: str = "") -> str:
         return "\n".join(lines)
 
     return f"Unknown action: {action}"
+
+
+def _start_session(ctx) -> str:
+    """Start a training session from the current plan."""
+    plan = ctx.session.state.get("current_plan")
+
+    if not plan or not plan.get("exercises"):
+        # No plan → generate one first, show it in planning mode
+        result = _generate_plan(ctx, "")
+        return f"No plan found. Generated one first:\n{result}\nSay 'start training' again to begin."
+
+    # Plan exists → set up first exercise
+    first_ex = plan["exercises"][0]
+    training_state = {
+        "exerciseId": first_ex.get("exercise_id", "bench_press"),
+        "activeExerciseIndex": 0,
+        "setNumber": 1,
+        "reps": 0,
+        "targetReps": first_ex.get("target_reps", 6),
+        "targetWeight": first_ex.get("target_weight", 0),
+        "targetSets": first_ex.get("target_sets", 4),
+    }
+    _push_to_frontend(ctx, "training_state", training_state)
+
+    # Switch to training mode
+    ui_navigate(ctx, command="switch_mode", data_json='{"mode":"training"}')
+
+    name = first_ex.get("name_en", first_ex.get("exercise_id", "?"))
+    return f"Training started. First exercise: {name}, {first_ex.get('target_sets')}x{first_ex.get('target_reps')} @ {first_ex.get('target_weight')}kg. Go!"
 
 
 def _generate_plan(ctx, data_json: str) -> str:
