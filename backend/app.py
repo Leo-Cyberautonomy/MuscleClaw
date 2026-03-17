@@ -134,6 +134,73 @@ async def _route_and_execute(user_text: str, session, websocket: WebSocket):
         tb.print_exc()
 
 
+async def _handle_set_complete(event_data: dict, session, websocket):
+    """Auto-process set completion: record set, start rest, advance to next set."""
+    try:
+        class _Ctx:
+            def __init__(self, sess):
+                self.session = sess
+        ctx = _Ctx(session)
+
+        # 1. Record the completed set
+        set_data = json.dumps({
+            "exercise_id": event_data.get("exercise_id", ""),
+            "set_number": event_data.get("set_number", 1),
+            "reps": event_data.get("reps", 0),
+            "weight": event_data.get("weight", 0),
+        })
+        result = tools_module.manage_training(ctx, action="write_set", data_json=set_data)
+        print(f"[SetComplete] Recorded: {result}")
+
+        # 2. Get current plan to determine next set/exercise
+        plan = ctx.session.state.get("current_plan") or ctx.session.state.get("user:current_plan")
+        if plan and plan.get("exercises"):
+            exercises = plan["exercises"]
+            current_ex_id = event_data.get("exercise_id", "")
+            current_set = event_data.get("set_number", 1)
+
+            # Find current exercise in plan
+            ex_idx = next((i for i, e in enumerate(exercises) if e.get("exercise_id") == current_ex_id), 0)
+            target_sets = exercises[ex_idx].get("target_sets", 4) if ex_idx < len(exercises) else 4
+
+            if current_set < target_sets:
+                # More sets in this exercise → rest then next set
+                rest_seconds = ctx.session.state.get("user:preferences", {}).get("rest_timer_seconds", 120)
+                tools_module.ui_navigate(ctx, command="start_rest_timer", data_json=json.dumps({"seconds": rest_seconds}))
+                # Advance set number
+                next_state = {"setNumber": current_set + 1, "reps": 0}
+                tools_module._push_to_frontend(ctx, "training_state", next_state)
+            elif ex_idx + 1 < len(exercises):
+                # Last set of this exercise → move to next exercise
+                next_ex = exercises[ex_idx + 1]
+                rest_seconds = ctx.session.state.get("user:preferences", {}).get("rest_timer_seconds", 120)
+                tools_module.ui_navigate(ctx, command="start_rest_timer", data_json=json.dumps({"seconds": rest_seconds}))
+                next_state = {
+                    "exerciseId": next_ex.get("exercise_id"),
+                    "activeExerciseIndex": ex_idx + 1,
+                    "setNumber": 1,
+                    "reps": 0,
+                    "targetReps": next_ex.get("target_reps", 6),
+                    "targetWeight": next_ex.get("target_weight", 0),
+                    "targetSets": next_ex.get("target_sets", 4),
+                }
+                tools_module._push_to_frontend(ctx, "training_state", next_state)
+            # else: all exercises done — completion card shows automatically
+
+        # 3. Inject result into Live API for audio model
+        live_queue = _get_live_queue(session.id)
+        if live_queue:
+            live_queue.send_content(types.Content(
+                role="user",
+                parts=[types.Part(text=f"[TOOL_RESULT] Set recorded: {result}. Rest timer started.")],
+            ))
+
+    except Exception as e:
+        print(f"[SetComplete] Error: {e}")
+        import traceback as tb
+        tb.print_exc()
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok", "agent": "muscleclaw"}
@@ -376,8 +443,16 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                     ))
 
                 elif msg["type"] == "cv_event":
-                    # CV engine event → inject as text context
-                    cv_text = f"[CV] {json.dumps(msg['event'], ensure_ascii=False)}"
+                    event_data = msg.get("event", {})
+                    cv_text = f"[CV] {json.dumps(event_data, ensure_ascii=False)}"
+
+                    # set_complete → auto record set + start rest timer + advance
+                    if event_data.get("type") == "set_complete":
+                        asyncio.create_task(
+                            _handle_set_complete(event_data, session, websocket)
+                        )
+
+                    # Inject as text context for audio model
                     live_queue.send_content(types.Content(
                         role="user",
                         parts=[types.Part(text=cv_text)],

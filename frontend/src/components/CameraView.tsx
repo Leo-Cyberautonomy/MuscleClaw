@@ -222,7 +222,19 @@ export function CameraView() {
                 if (repEvent) {
                   adkClient.sendCVEvent(repEvent);
                   if (repEvent.type === 'rep_complete') {
-                    useTrainingStore.getState().updateTraining({ reps: repEvent.rep });
+                    const store = useTrainingStore.getState();
+                    store.updateTraining({ reps: repEvent.rep });
+
+                    // Check if set is complete → send set_complete to backend
+                    if (repEvent.rep >= store.targetReps && store.targetReps > 0) {
+                      adkClient.sendCVEvent({
+                        type: 'set_complete',
+                        exercise_id: exerciseId,
+                        set_number: store.setNumber,
+                        reps: repEvent.rep,
+                        weight: store.targetWeight,
+                      });
+                    }
                   }
                 }
 
