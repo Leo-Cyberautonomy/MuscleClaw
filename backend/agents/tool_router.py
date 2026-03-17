@@ -58,6 +58,18 @@ TOOL_DECLARATIONS = [
         ),
     ),
     types.FunctionDeclaration(
+        name="ui_navigate",
+        description="Switch frontend page. Use when user wants to navigate without data operations: start training, enter showcase, show dashboard.",
+        parameters=types.Schema(
+            type="OBJECT",
+            properties={
+                "command": types.Schema(type="STRING", description="switch_mode or start_rest_timer"),
+                "data_json": types.Schema(type="STRING", description='{"mode":"training"} or {"mode":"showcase"} or {"mode":"dashboard"} or {"seconds":120}'),
+            },
+            required=["command"],
+        ),
+    ),
+    types.FunctionDeclaration(
         name="no_action",
         description="No tool needed — casual conversation, greeting, or question that doesn't require data changes.",
         parameters=types.Schema(type="OBJECT", properties={}),
@@ -91,6 +103,8 @@ ROUTING RULES:
 - "set emergency contact 999" → manage_preferences(action="write", data_json='{"emergency_contact":"999"}')
 - "show dashboard" / "show my status" → manage_profile(action="read") [auto-switches to dashboard]
 - "show plan" / "show my plan" → manage_training(action="read_plan") [auto-switches to planning]
+- "start training" / "let's go" / "begin workout" → manage_training(action="start_session")
+- "enter showcase" / "showcase mode" / "show off" → ui_navigate(command="switch_mode", data_json='{"mode":"showcase"}')
 - "analyze posture" → manage_profile(action="write_posture", data_json='{"issues":[],"overall":"good"}') [auto-switches to posture]
 - "trigger safety alert" → safety_control(action="trigger", data_json='{"alert_type":"barbell_stall","countdown_seconds":10}')
 - "cancel safety alert" → safety_control(action="cancel")

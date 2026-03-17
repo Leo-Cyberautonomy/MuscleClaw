@@ -89,6 +89,7 @@ async def _route_and_execute(user_text: str, session, websocket: WebSocket):
             "manage_training": tools_module.manage_training,
             "manage_preferences": tools_module.manage_preferences,
             "safety_control": tools_module.safety_control,
+            "ui_navigate": tools_module.ui_navigate,
         }
 
         func = TOOL_MAP.get(tool_name)
@@ -254,9 +255,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     prefs = session.state.get("user:preferences", DEFAULT_PREFERENCES)
     voice_name = prefs.get("voice_name", "Charon")
 
-    # Minimal RunConfig — only voice and audio modality.
-    # Advanced features (affective_dialog, proactivity, session_resumption,
-    # context_window_compression) require Vertex AI (v1alpha endpoint).
     run_config = RunConfig(
         speech_config=types.SpeechConfig(
             voice_config=types.VoiceConfig(
@@ -268,10 +266,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
         response_modalities=["AUDIO"],
         input_audio_transcription=types.AudioTranscriptionConfig(),
         output_audio_transcription=types.AudioTranscriptionConfig(),
-        # VAD tuning: reduce false interruptions from background noise
-        # LOW start sensitivity = don't trigger on quiet sounds
-        # LOW end sensitivity = wait longer before deciding user stopped
-        # 1000ms silence = user must pause 1s before AI considers turn over
+        # VAD: reduce false interruptions from background noise
         realtime_input_config=types.RealtimeInputConfig(
             automatic_activity_detection=types.AutomaticActivityDetection(
                 start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_LOW,
@@ -279,6 +274,10 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                 silence_duration_ms=1000,
             ),
             activity_handling=types.ActivityHandling.START_OF_ACTIVITY_INTERRUPTS,
+        ),
+        # Extend session beyond 15min limit using sliding window compression
+        context_window_compression=types.ContextWindowCompressionConfig(
+            sliding_window=types.SlidingWindow(),
         ),
     )
 
@@ -459,9 +458,9 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                     ))
 
                 elif msg["type"] == "video_frame":
-                    # Video frames not supported by native-audio model.
-                    # Visual understanding relies on CV engine events instead.
-                    # Enable when using a model that supports video input.
+                    # Video frames disabled — kept for future use.
+                    # Model supports video input but session limit drops to 2min.
+                    # context_window_compression extends it, but not tested yet.
                     pass
 
     except WebSocketDisconnect:

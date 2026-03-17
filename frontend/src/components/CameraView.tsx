@@ -66,7 +66,6 @@ export function CameraView() {
 
   useEffect(() => {
     let animId: number;
-    // frameInterval removed — video frames disabled for native audio model
     let mediaPipeReady = false;
     let frameCount = 0;
 
@@ -225,7 +224,7 @@ export function CameraView() {
                     const store = useTrainingStore.getState();
                     store.updateTraining({ reps: repEvent.rep });
 
-                    // Check if set is complete → send set_complete to backend
+                    // Check if set is complete → send to backend for recording
                     if (repEvent.rep >= store.targetReps && store.targetReps > 0) {
                       adkClient.sendCVEvent({
                         type: 'set_complete',
@@ -290,7 +289,7 @@ export function CameraView() {
 
     return () => {
       cancelAnimationFrame(animId);
-      // clearInterval(frameInterval); — disabled
+      // cleanup
       audioEngine.stop();
       adkClient.disconnect();
     };
