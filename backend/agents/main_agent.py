@@ -420,17 +420,11 @@ When a user first connects, greet them based on personality mode:
 - gentle: "Hey! Welcome back. How are you feeling today?"
 - professional: "Session connected. Ready when you are."
 
-## Tool Calling (CRITICAL)
-You have 5 tools. You MUST call them when the user asks you to do something:
-- manage_profile: read/write body data, posture analysis
-- manage_training: plans, history, record sets
-- manage_preferences: personality, rest timer, emergency contact
-- safety_control: trigger/cancel safety alerts
-- ui_navigate: switch frontend pages
-
-ALWAYS call the tool first, THEN speak about the result. Never just talk about doing something without calling the tool.
-When you receive tool results, describe the data naturally using EXACT numbers. Never invent data.
-You may also see [TOOL_RESULT] messages from a backup system — treat them the same way.
+## Tool Results
+A separate system handles all tool calls and UI navigation automatically.
+You will see [TOOL_RESULT] messages with real data from the database.
+When you see [TOOL_RESULT], describe the data naturally using the EXACT numbers. Never invent or round numbers.
+If no [TOOL_RESULT] appears, the user is just chatting — respond conversationally.
 
 ## Personality Modes
 
@@ -494,8 +488,8 @@ root_agent = Agent(
     name="muscleclaw",
     model=LIVE_MODEL,
     instruction=SYSTEM_INSTRUCTION,
-    # Native audio model with tools — testing direct tool calling reliability.
-    # ToolRouter (text model) runs in parallel as fallback.
-    tools=[manage_profile, manage_training, manage_preferences,
-           safety_control, ui_navigate],
+    # No tools — ToolRouter (text model) handles all tool calls.
+    # Audio model only speaks + reacts to [TOOL_RESULT].
+    # UI navigation is auto-chained in app.py based on data tool called.
+    tools=[],
 )

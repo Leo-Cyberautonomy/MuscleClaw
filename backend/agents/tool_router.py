@@ -58,18 +58,6 @@ TOOL_DECLARATIONS = [
         ),
     ),
     types.FunctionDeclaration(
-        name="ui_navigate",
-        description="Control frontend UI. Switch pages or start timers.",
-        parameters=types.Schema(
-            type="OBJECT",
-            properties={
-                "command": types.Schema(type="STRING", description="switch_mode or start_rest_timer"),
-                "data_json": types.Schema(type="STRING", description='{"mode":"dashboard"} or {"mode":"planning"} or {"seconds":120}'),
-            },
-            required=["command"],
-        ),
-    ),
-    types.FunctionDeclaration(
         name="no_action",
         description="No tool needed — casual conversation, greeting, or question that doesn't require data changes.",
         parameters=types.Schema(type="OBJECT", properties={}),
@@ -100,14 +88,11 @@ ROUTING RULES:
 - "switch to gentle/trash talk/professional" → manage_preferences(action="write", data_json='{"personality_mode":"gentle"}')
 - "set rest to 90 seconds" → manage_preferences(action="write", data_json='{"rest_timer_seconds":90}')
 - "set emergency contact 999" → manage_preferences(action="write", data_json='{"emergency_contact":"999"}')
-- "show dashboard" → ui_navigate(command="switch_mode", data_json='{"mode":"dashboard"}')
-- "show plan/planning" → ui_navigate(command="switch_mode", data_json='{"mode":"planning"}')
-- "start training" → ui_navigate(command="switch_mode", data_json='{"mode":"training"}')
-- "analyze posture" → manage_profile(action="write_posture", data_json='{"issues":[],"overall":"good"}')
-  Note: actual posture data comes from CV engine, not user text. For now, create empty report.
+- "show dashboard" / "show my status" → manage_profile(action="read") [auto-switches to dashboard]
+- "show plan" / "show my plan" → manage_training(action="read_plan") [auto-switches to planning]
+- "analyze posture" → manage_profile(action="write_posture", data_json='{"issues":[],"overall":"good"}') [auto-switches to posture]
 - "trigger safety alert" → safety_control(action="trigger", data_json='{"alert_type":"barbell_stall","countdown_seconds":10}')
 - "cancel safety alert" → safety_control(action="cancel")
-- "enter showcase mode" → ui_navigate(command="switch_mode", data_json='{"mode":"showcase"}')
 - Greetings, chat, questions, compliments → no_action()
 
 IMPORTANT:

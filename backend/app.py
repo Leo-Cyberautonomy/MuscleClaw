@@ -89,7 +89,6 @@ async def _route_and_execute(user_text: str, session, websocket: WebSocket):
             "manage_training": tools_module.manage_training,
             "manage_preferences": tools_module.manage_preferences,
             "safety_control": tools_module.safety_control,
-            "ui_navigate": tools_module.ui_navigate,
         }
 
         func = TOOL_MAP.get(tool_name)
@@ -104,10 +103,20 @@ async def _route_and_execute(user_text: str, session, websocket: WebSocket):
         result = func(ctx, **clean_args)
         print(f"[Router] Executed {tool_name}({clean_args.get('action','')}) → {str(result)[:80]}")
 
-        # Auto-chain: plan generation/modification → switch to planning view
+        # Auto-chain: data tool → UI navigation (code-level binding)
+        # Audio model doesn't need to call UI tools — it's deterministic.
         action = clean_args.get("action", "")
-        if tool_name == "manage_training" and action in ("generate_plan", "modify_plan"):
-            tools_module.ui_navigate(ctx, command="switch_mode", data_json='{"mode":"planning"}')
+        AUTO_UI = {
+            ("manage_profile", "read"): "dashboard",
+            ("manage_profile", "write"): "dashboard",
+            ("manage_profile", "write_posture"): "posture",
+            ("manage_training", "generate_plan"): "planning",
+            ("manage_training", "modify_plan"): "planning",
+            ("manage_training", "read_plan"): "planning",
+        }
+        target_mode = AUTO_UI.get((tool_name, action))
+        if target_mode:
+            tools_module.ui_navigate(ctx, command="switch_mode", data_json=json.dumps({"mode": target_mode}))
 
         # Inject tool result into Live API so audio model speaks about REAL data
         # This prevents audio model from inventing different numbers
@@ -261,10 +270,10 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                 "role": "user",
                                 "text": user_text,
                             })
-                            # ToolRouter disabled for A/B test — audio model calls tools directly
-                            # asyncio.create_task(
-                            #     _route_and_execute(user_text, session, websocket)
-                            # )
+                            # Route voice transcript through ToolRouter
+                            asyncio.create_task(
+                                _route_and_execute(user_text, session, websocket)
+                            )
 
                     # Data layer: push state changes to frontend
                     if event.actions:
@@ -355,13 +364,12 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                 elif msg["type"] == "text":
                     user_text = msg["text"]
 
-                    # Single model: audio model calls tools via ADK.
-                    # ToolRouter disabled for A/B test.
-                    # asyncio.create_task(
-                    #     _route_and_execute(user_text, session, websocket)
-                    # )
+                    # ToolRouter: text model handles tool calls (100% reliable)
+                    asyncio.create_task(
+                        _route_and_execute(user_text, session, websocket)
+                    )
 
-                    # Send to Live API — audio model has tools, will call them
+                    # Also send to Live API for voice response
                     live_queue.send_content(types.Content(
                         role="user",
                         parts=[types.Part(text=user_text)],
