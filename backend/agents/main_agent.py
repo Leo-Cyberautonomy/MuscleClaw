@@ -240,11 +240,11 @@ AVAILABLE EXERCISES:
 
 TRAINING SCIENCE PRINCIPLES (apply these):
 
-1. EXERCISE SELECTION
-   - Start with compound movements (bench_press, squat, deadlift, barbell_row, ohp)
-   - Finish with isolation (barbell_curl, plank)
-   - 2-4 exercises per session. More is not better.
-   - Choose exercises that match the target muscles
+1. EXERCISE SELECTION (MUST include 3-4 exercises, never less than 3)
+   - Start with the primary compound for each target muscle
+   - Add a secondary compound or variation
+   - Finish with 1 isolation or accessory movement
+   - Example for chest+back: bench_press → barbell_row → deadlift → barbell_curl
 
 2. PROGRESSIVE OVERLOAD
    - Working weight = 75-85% of PR for strength (3-6 reps)
@@ -273,10 +273,12 @@ TRAINING SCIENCE PRINCIPLES (apply these):
    - Vary rep ranges, exercise order, or working weight
    - If user did 4x6 last time, try 3x10 or 5x5 this time
 
+IMPORTANT: You MUST include at least 3 exercises. A plan with only 1-2 exercises is incomplete.
+
 Return ONLY valid JSON. No markdown, no explanation.
 
-JSON FORMAT:
-{{"target_parts":["chest","back"],"exercises":[{{"exercise_id":"bench_press","name":"卧推","name_en":"Bench Press","primary_muscles":["chest"],"secondary_muscles":["shoulders","arms"],"target_sets":4,"target_reps":8,"target_weight":85.0,"completed_sets":0}}]}}"""
+JSON FORMAT (example with 3 exercises):
+{{"target_parts":["chest","back"],"exercises":[{{"exercise_id":"bench_press","name":"卧推","name_en":"Bench Press","primary_muscles":["chest"],"secondary_muscles":["shoulders","arms"],"target_sets":4,"target_reps":8,"target_weight":85.0,"completed_sets":0}},{{"exercise_id":"barbell_row","name":"杠铃划船","name_en":"Barbell Row","primary_muscles":["back"],"secondary_muscles":["arms"],"target_sets":4,"target_reps":8,"target_weight":65.0,"completed_sets":0}},{{"exercise_id":"barbell_curl","name":"杠铃弯举","name_en":"Barbell Curl","primary_muscles":["arms"],"secondary_muscles":[],"target_sets":3,"target_reps":12,"target_weight":30.0,"completed_sets":0}}]}}"""
 
     try:
         client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))

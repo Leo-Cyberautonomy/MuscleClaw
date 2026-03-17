@@ -1,6 +1,5 @@
 import { useAppStore, type AppMode } from '../stores/appStore';
 import { useUIStore } from '../stores/uiStore';
-import { adkClient } from '../ws/adkClient';
 
 const MODES: { mode: AppMode; label: string }[] = [
   { mode: 'dashboard', label: 'Dashboard' },
@@ -12,7 +11,6 @@ const MODES: { mode: AppMode; label: string }[] = [
 
 export function ControlBar() {
   const mode = useAppStore((s) => s.mode);
-  const connected = useAppStore((s) => s.connected);
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
 
   function switchMode(m: AppMode) {
@@ -22,10 +20,6 @@ export function ControlBar() {
       store.setMode('idle');
     } else {
       store.setMode(m);
-      // Also tell backend about mode switch
-      if (connected) {
-        adkClient.sendText(`[MODE] Switched to ${m}`);
-      }
     }
   }
 
