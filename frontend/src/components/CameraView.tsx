@@ -94,6 +94,40 @@ export function CameraView() {
         console.warn('[Audio] Mic access denied or failed:', e);
       }
 
+      // Browser SpeechRecognition → ToolRouter (ensures voice commands trigger tools)
+      // Gemini Live API input_audio_transcription is unreliable with native audio model
+      try {
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        if (SpeechRecognition) {
+          const recognition = new SpeechRecognition();
+          recognition.continuous = true;
+          recognition.interimResults = false;
+          recognition.lang = 'en-US';
+          recognition.onresult = (event: any) => {
+            const last = event.results[event.results.length - 1];
+            if (last.isFinal) {
+              const text = last[0].transcript.trim();
+              if (text.length > 2) {
+                console.log(`[Speech] Recognized: ${text}`);
+                // Send as text to trigger ToolRouter on backend
+                adkClient.sendText(text);
+              }
+            }
+          };
+          recognition.onerror = (e: any) => {
+            if (e.error !== 'no-speech') console.warn('[Speech] Error:', e.error);
+          };
+          recognition.onend = () => {
+            // Auto-restart
+            try { recognition.start(); } catch {}
+          };
+          recognition.start();
+          console.log('[Speech] Recognition started');
+        }
+      } catch (e) {
+        console.warn('[Speech] Not available:', e);
+      }
+
       // Initialize MediaPipe (async, non-blocking)
       initMediaPipe().then(() => {
         mediaPipeReady = true;
