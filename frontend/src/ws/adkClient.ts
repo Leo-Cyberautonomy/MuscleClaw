@@ -128,6 +128,10 @@ class ADKClient {
       case 'cancel_safety_alert': ui.setSafetyAlert(false); break;
       case 'start_rest_timer': if (d.seconds) training.setRestTimer(d.seconds); break;
       case 'update_set_info': if (d) training.updateTraining(d); break;
+      case 'showcase_capture':
+        // AI triggered capture — dispatch custom event for ShowcaseCapture to handle
+        window.dispatchEvent(new CustomEvent('showcase-capture'));
+        break;
     }
     this.handlers.onUICommand?.(command, d);
   }

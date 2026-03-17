@@ -1,7 +1,7 @@
 /**
  * ShowcaseModal — Full-screen display of AI-enhanced muscular photo.
  */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 interface ShowcaseModalProps {
   imageSrc: string;
@@ -45,42 +45,17 @@ export function ShowcaseModal({ imageSrc, onClose }: ShowcaseModalProps) {
 
 
 /**
- * ShowcaseCapture — Auto-captures after 5s countdown, or manual button.
- * When entering showcase mode, starts countdown automatically.
+ * ShowcaseCapture — Captures on AI command or manual button click.
+ * Listens for 'showcase-capture' custom event (triggered by AI via ToolRouter).
  */
 export function ShowcaseCapture({ videoRef }: { videoRef: React.RefObject<HTMLVideoElement | null> }) {
   const [loading, setLoading] = useState(false);
   const [resultSrc, setResultSrc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [countdown, setCountdown] = useState(5);
-  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const capturedRef = useRef(false);
 
-  // Auto-countdown on mount
-  useEffect(() => {
-    capturedRef.current = false;
-    setCountdown(5);
-    countdownRef.current = setInterval(() => {
-      setCountdown(prev => {
-        if (prev <= 1) {
-          if (countdownRef.current) clearInterval(countdownRef.current);
-          if (!capturedRef.current) {
-            capturedRef.current = true;
-            doCapture();
-          }
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => {
-      if (countdownRef.current) clearInterval(countdownRef.current);
-    };
-  }, []);
-
-  const doCapture = async () => {
+  const doCapture = useCallback(async () => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || loading) return;
 
     setLoading(true);
     setError(null);
@@ -111,33 +86,27 @@ export function ShowcaseCapture({ videoRef }: { videoRef: React.RefObject<HTMLVi
     } finally {
       setLoading(false);
     }
-  };
+  }, [videoRef, loading]);
+
+  // Listen for AI-triggered capture
+  useEffect(() => {
+    const handler = () => doCapture();
+    window.addEventListener('showcase-capture', handler);
+    return () => window.removeEventListener('showcase-capture', handler);
+  }, [doCapture]);
 
   return (
     <>
-      {/* Countdown or status */}
-      {!loading && !resultSrc && countdown > 0 && (
-        <div style={{
-          textAlign: 'center', marginBottom: 12,
-          fontFamily: 'var(--font-mono)', fontSize: 48, fontWeight: 800,
-          color: 'var(--brand-purple)',
-          animation: 'scaleIn 0.3s var(--spring) both',
-        }}>
-          {countdown}
-        </div>
-      )}
-
       {loading && (
         <div style={{
           textAlign: 'center', padding: 20,
           fontSize: 14, color: 'var(--text-secondary)',
         }}>
-          Enhancing your muscles...
+          Enhancing...
         </div>
       )}
 
-      {/* Manual capture button (if countdown finished but capture failed, or user wants to retry) */}
-      {!loading && !resultSrc && countdown === 0 && (
+      {!loading && !resultSrc && (
         <button
           onClick={doCapture}
           style={{
@@ -149,7 +118,7 @@ export function ShowcaseCapture({ videoRef }: { videoRef: React.RefObject<HTMLVi
             boxShadow: '0 4px 16px rgba(94,92,230,.3)',
           }}
         >
-          Retry Capture
+          Capture & Enhance
         </button>
       )}
 

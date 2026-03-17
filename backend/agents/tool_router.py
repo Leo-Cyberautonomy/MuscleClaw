@@ -105,6 +105,7 @@ ROUTING RULES:
 - "show plan" / "show my plan" → manage_training(action="read_plan") [auto-switches to planning]
 - "start training" / "let's go" / "begin workout" → manage_training(action="start_session")
 - "enter showcase" / "showcase mode" / "show off" → ui_navigate(command="switch_mode", data_json='{"mode":"showcase"}')
+- "ready" / "take the photo" / "go" / "capture" / "shoot" (in showcase mode) → ui_navigate(command="showcase_capture", data_json='{}')
 - "analyze posture" → manage_profile(action="write_posture", data_json='{"issues":[],"overall":"good"}') [auto-switches to posture]
 - "trigger safety alert" → safety_control(action="trigger", data_json='{"alert_type":"barbell_stall","countdown_seconds":10}')
 - "cancel safety alert" → safety_control(action="cancel")
