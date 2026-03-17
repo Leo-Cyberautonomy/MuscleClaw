@@ -158,37 +158,125 @@ def record_training_set(ctx: ToolContext, exercise_id: str, set_number: int,
 
 
 def generate_training_plan(ctx: ToolContext, target_parts: str = "") -> str:
-    """Generate training plan. target_parts: comma-separated like 'chest,back'. Empty = auto."""
+    """Generate training plan using Gemini AI. target_parts: comma-separated like 'chest,back'. Empty = auto."""
+    import os
+    from google import genai
+    from google.genai import types as gtypes
+
     print(f"[TOOL] generate_training_plan called with target_parts='{target_parts}'")
     profile = ctx.session.state.get("user:body_profile", DEFAULT_BODY_PROFILE)
+    history = ctx.session.state.get("user:training_history", [])
+
+    # Determine target parts
     parts = [p.strip() for p in target_parts.split(",") if p.strip()] if target_parts else []
     if not parts:
-        parts = [p for p, d in profile.items() if d["recovery_status"] == "recovered"]
+        parts = [p for p, d in profile.items() if d.get("recovery_status") == "recovered"]
         if not parts:
             parts = ["chest", "back"]
 
-    exercises = []
-    lines = [f"Plan for: {', '.join(parts)}"]
-    for part in parts:
-        ex_id = profile.get(part, {}).get("exercise", "bench_press")
-        max_w = profile.get(part, {}).get("max_weight", 0)
-        target_w = round(max_w * 0.85, 1) if max_w > 0 else 20
-        ex_info = EXERCISE_LIBRARY.get(ex_id, {})
-        ex_name = ex_info.get("name_en", ex_id)
-        exercises.append({
-            "exercise_id": ex_id,
-            "name": ex_info.get("name", ex_id),
-            "name_en": ex_name,
-            "primary_muscles": ex_info.get("primary_muscles", [part]),
-            "secondary_muscles": ex_info.get("secondary_muscles", []),
-            "target_sets": 4, "target_reps": 6,
-            "target_weight": target_w, "completed_sets": 0,
-        })
-        lines.append(f"  {ex_name}: 4x6 @ {target_w}kg (85% of {max_w}kg PR)")
+    # Build context for Gemini
+    profile_summary = []
+    for part, data in profile.items():
+        if not isinstance(data, dict):
+            continue
+        ex = data.get("exercise", "unknown")
+        mw = data.get("max_weight", 0)
+        status = data.get("recovery_status", "unknown")
+        last = data.get("last_trained", "never")
+        profile_summary.append(f"{part}: exercise={ex}, PR={mw}kg, status={status}, last_trained={last}")
 
-    plan = {"target_parts": parts, "exercises": exercises}
+    recent_sessions = []
+    for s in (history[-5:] if isinstance(history, list) else []):
+        if not isinstance(s, dict):
+            continue
+        date = s.get("date", "?")
+        for ex in s.get("exercises", []):
+            eid = ex.get("exercise_id", "?")
+            sets = ex.get("sets", [])
+            max_w = max((st.get("weight", 0) for st in sets), default=0) if sets else 0
+            total_reps = sum(st.get("reps", 0) for st in sets) if sets else 0
+            recent_sessions.append(f"{date}: {eid} {len(sets)} sets, max {max_w}kg, {total_reps} reps")
+
+    available_exercises = []
+    for eid, info in EXERCISE_LIBRARY.items():
+        available_exercises.append(f"{eid}: {info.get('name_en', eid)}, primary={info.get('primary_muscles')}")
+
+    prompt = f"""Generate a training plan for today. Target muscle groups: {', '.join(parts)}.
+
+USER PROFILE:
+{chr(10).join(profile_summary)}
+
+RECENT TRAINING HISTORY (last 5 sessions):
+{chr(10).join(recent_sessions) if recent_sessions else 'No recent history.'}
+
+AVAILABLE EXERCISES:
+{chr(10).join(available_exercises)}
+
+RULES:
+- Return ONLY a valid JSON object, no markdown, no explanation
+- Use progressive overload: working weight = 70-85% of PR
+- Vary sets (3-5) and reps (5-12) based on the goal
+- If user trained a muscle recently, use lighter weight / higher reps (deload)
+- Include 2-4 exercises total, mixing compound and isolation
+- Each exercise must use an exercise_id from AVAILABLE EXERCISES
+
+JSON FORMAT (strict):
+{{
+  "target_parts": ["chest", "back"],
+  "exercises": [
+    {{
+      "exercise_id": "bench_press",
+      "name": "卧推",
+      "name_en": "Bench Press",
+      "primary_muscles": ["chest"],
+      "secondary_muscles": ["shoulders", "arms"],
+      "target_sets": 4,
+      "target_reps": 8,
+      "target_weight": 85.0,
+      "completed_sets": 0
+    }}
+  ]
+}}"""
+
+    try:
+        client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[gtypes.Content(role="user", parts=[gtypes.Part(text=prompt)])],
+            config=gtypes.GenerateContentConfig(
+                temperature=0.7,
+                response_mime_type="application/json",
+            ),
+        )
+        plan_text = response.text.strip()
+        plan = json.loads(plan_text)
+    except Exception as e:
+        print(f"[TOOL] AI plan generation failed: {e}, using fallback")
+        # Fallback: deterministic plan
+        exercises = []
+        for part in parts:
+            ex_id = profile.get(part, {}).get("exercise", "bench_press") if isinstance(profile.get(part), dict) else "bench_press"
+            max_w = profile.get(part, {}).get("max_weight", 0) if isinstance(profile.get(part), dict) else 0
+            target_w = round(max_w * 0.85, 1) if max_w > 0 else 20
+            ex_info = EXERCISE_LIBRARY.get(ex_id, {})
+            exercises.append({
+                "exercise_id": ex_id, "name": ex_info.get("name", ex_id),
+                "name_en": ex_info.get("name_en", ex_id),
+                "primary_muscles": ex_info.get("primary_muscles", [part]),
+                "secondary_muscles": ex_info.get("secondary_muscles", []),
+                "target_sets": 4, "target_reps": 6,
+                "target_weight": target_w, "completed_sets": 0,
+            })
+        plan = {"target_parts": parts, "exercises": exercises}
+
     ctx.session.state["current_plan"] = plan
     _push_to_frontend(ctx, "current_plan", plan)
+
+    # Return human-readable summary for voice model
+    lines = [f"Plan for: {', '.join(plan.get('target_parts', parts))}"]
+    for ex in plan.get("exercises", []):
+        name = ex.get("name_en", ex.get("name", "?"))
+        lines.append(f"  {name}: {ex.get('target_sets',4)}x{ex.get('target_reps',6)} @ {ex.get('target_weight',0)}kg")
     return "\n".join(lines)
 
 
