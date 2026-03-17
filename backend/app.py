@@ -83,20 +83,13 @@ async def _route_and_execute(user_text: str, session, websocket: WebSocket):
                 self.session = sess
         ctx = _Ctx(session)
 
-        # Map tool names to functions
+        # 6 domain-grouped tools
         TOOL_MAP = {
-            "get_body_profile": tools_module.get_body_profile,
-            "update_body_profile": tools_module.update_body_profile,
-            "get_training_history": tools_module.get_training_history,
-            "record_training_set": tools_module.record_training_set,
-            "generate_training_plan": tools_module.generate_training_plan,
-            "trigger_safety_alert": tools_module.trigger_safety_alert,
-            "cancel_safety_alert": tools_module.cancel_safety_alert,
-            "get_user_preferences": tools_module.get_user_preferences,
-            "update_user_preferences": tools_module.update_user_preferences,
-            "get_exercise_info": tools_module.get_exercise_info,
-            "analyze_posture": tools_module.analyze_posture,
-            "send_ui_command": tools_module.send_ui_command,
+            "manage_profile": tools_module.manage_profile,
+            "manage_training": tools_module.manage_training,
+            "manage_preferences": tools_module.manage_preferences,
+            "safety_control": tools_module.safety_control,
+            "ui_navigate": tools_module.ui_navigate,
         }
 
         func = TOOL_MAP.get(tool_name)
@@ -104,16 +97,17 @@ async def _route_and_execute(user_text: str, session, websocket: WebSocket):
             print(f"[Router] Unknown tool: {tool_name}")
             return
 
-        # Filter args: remove empty/None values, pass only what the function accepts
+        # Filter args: remove empty/None values
         clean_args = {k: v for k, v in (tool_args or {}).items() if v is not None and v != ""}
 
         # Execute tool
         result = func(ctx, **clean_args)
-        print(f"[Router] Executed {tool_name} → {str(result)[:80]}")
+        print(f"[Router] Executed {tool_name}({clean_args.get('action','')}) → {str(result)[:80]}")
 
-        # Auto-chain: plan generation needs UI switch
-        if tool_name == "generate_training_plan":
-            tools_module.send_ui_command(ctx, command="switch_mode", data_json='{"mode":"planning"}')
+        # Auto-chain: plan generation/modification → switch to planning view
+        action = clean_args.get("action", "")
+        if tool_name == "manage_training" and action in ("generate_plan", "modify_plan"):
+            tools_module.ui_navigate(ctx, command="switch_mode", data_json='{"mode":"planning"}')
 
         # Inject tool result into Live API so audio model speaks about REAL data
         # This prevents audio model from inventing different numbers

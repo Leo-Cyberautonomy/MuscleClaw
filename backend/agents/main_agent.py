@@ -1,12 +1,10 @@
-"""MuscleClaw ADK Agent — Single agent with direct WebSocket push.
+"""MuscleClaw ADK Agent — 6 domain-grouped tools.
 
-All prompts and tool responses in English (Gemini competition requirement).
-SequentialAgent abandoned: Live mode native audio model doesn't reliably
-call task_completed(), causing workflow to get stuck. Instead, we use a
-single agent with strong prompt constraints for step-by-step behavior,
-and _push_to_frontend() for reliable data delivery.
+Architecture: LLM (ToolRouter) generates data → Tools validate + persist.
+Google ADK best practice: ≤10 tools, each covers a data domain.
 """
 import json
+import os
 import uuid
 from datetime import datetime, timezone
 
@@ -21,28 +19,20 @@ from config.exercise_library import EXERCISE_LIBRARY
 # LIVE MODE PUSH HELPER
 # ══════════════════════════════════════════════════════════════════
 
-def _push_to_frontend(ctx: ToolContext, key: str, data):
-    """Push state_sync to frontend AND persist to Firestore.
-
-    In Live mode, event.actions.state_delta doesn't propagate tool state
-    changes. So tools must:
-    1. Push data directly to frontend via WebSocket
-    2. Persist user: prefixed data directly to Firestore
-    """
+def _push_to_frontend(ctx, key: str, data):
+    """Push state_sync to frontend WebSocket + persist user: keys to Firestore."""
     import asyncio
     try:
         from app import WS_REGISTRY
         ws = WS_REGISTRY.get(ctx.session.id)
         if ws:
             loop = asyncio.get_event_loop()
-            # 1. Push to frontend
             asyncio.run_coroutine_threadsafe(
                 ws.send_json({"type": "state_sync", "key": key, "data": data}),
                 loop,
             )
-            # 2. Persist user: keys to Firestore
             if key.startswith("user:"):
-                firestore_key = key[len("user:"):]  # strip prefix
+                firestore_key = key[len("user:"):]
                 asyncio.run_coroutine_threadsafe(
                     _persist_user_state(ctx, firestore_key, data),
                     loop,
@@ -51,334 +41,346 @@ def _push_to_frontend(ctx: ToolContext, key: str, data):
         print(f"[Push] Failed to push {key}: {e}")
 
 
-async def _persist_user_state(ctx: ToolContext, key: str, value):
+async def _persist_user_state(ctx, key: str, value):
     """Write a single user-state key directly to Firestore."""
     try:
         from app import session_service
         ref = session_service._user_state_ref(ctx.session.app_name, ctx.session.user_id)
         await ref.set({key: value}, merge=True)
-        print(f"[Firestore] Persisted user:{key}")
     except Exception as e:
         print(f"[Firestore] Failed to persist user:{key}: {e}")
 
 
 # ══════════════════════════════════════════════════════════════════
-# TOOLS
+# TOOL 1: manage_profile
 # ══════════════════════════════════════════════════════════════════
 
-def get_body_profile(ctx: ToolContext) -> str:
-    """Get user's 6 muscle group strength data and recovery status."""
-    profile = ctx.session.state.get("user:body_profile", DEFAULT_BODY_PROFILE)
-    _push_to_frontend(ctx, "user:body_profile", profile)
-    lines = []
-    for part, data in profile.items():
-        ex = data.get("exercise", "unknown")
-        mw = data.get("max_weight", 0)
-        status = data.get("recovery_status", "unknown")
-        last = data.get("last_trained", "never")
-        lines.append(f"{part}: {ex} PR {mw}kg, status={status}, last={last}")
-    return "\n".join(lines)
-
-
-def update_body_profile(ctx: ToolContext, part: str, max_weight: float = 0,
-                        last_trained: str = "", notes: str = "") -> str:
-    """Update a muscle group's data. part: chest|shoulders|back|legs|core|arms"""
+def manage_profile(ctx: ToolContext, action: str, part: str = "all", data_json: str = "") -> str:
+    """Manage body profile. action: read|write. part: all|chest|shoulders|back|legs|core|arms.
+    For write: data_json is JSON like '{"max_weight":120,"last_trained":"2026-03-17"}'."""
     profile = ctx.session.state.get("user:body_profile", DEFAULT_BODY_PROFILE.copy())
-    if part not in profile:
-        return f"Unknown body part: {part}"
-    if max_weight > 0 and max_weight > profile[part].get("max_weight", 0):
-        profile[part]["max_weight"] = max_weight
-    if last_trained:
-        profile[part]["last_trained"] = last_trained
-        profile[part]["recovery_status"] = "recovering"
-    if notes:
-        profile[part]["notes"] = notes
-    ctx.session.state["user:body_profile"] = profile
-    _push_to_frontend(ctx, "user:body_profile", profile)
-    return f"Updated {part}: max_weight={profile[part]['max_weight']}kg"
+
+    if action == "read":
+        _push_to_frontend(ctx, "user:body_profile", profile)
+        if part != "all" and part in profile:
+            d = profile[part]
+            return f"{part}: {d.get('exercise','?')} PR {d.get('max_weight',0)}kg, status={d.get('recovery_status','?')}, last={d.get('last_trained','never')}"
+        lines = []
+        for p, d in profile.items():
+            if not isinstance(d, dict):
+                continue
+            lines.append(f"{p}: {d.get('exercise','?')} PR {d.get('max_weight',0)}kg, status={d.get('recovery_status','?')}, last={d.get('last_trained','never')}")
+        return "\n".join(lines)
+
+    elif action == "write":
+        if part == "all" or part not in profile:
+            return f"Error: specify a valid part (chest|shoulders|back|legs|core|arms), got '{part}'"
+        try:
+            data = json.loads(data_json) if data_json else {}
+        except json.JSONDecodeError:
+            return f"Invalid JSON: {data_json}"
+        for k, v in data.items():
+            if k == "max_weight" and isinstance(v, (int, float)):
+                if v > profile[part].get("max_weight", 0):
+                    profile[part]["max_weight"] = v
+            elif k == "last_trained":
+                profile[part]["last_trained"] = v
+                profile[part]["recovery_status"] = "recovering"
+            else:
+                profile[part][k] = v
+        ctx.session.state["user:body_profile"] = profile
+        _push_to_frontend(ctx, "user:body_profile", profile)
+        return f"Updated {part}: {json.dumps(profile[part], default=str)}"
+
+    return f"Unknown action: {action}"
 
 
-def get_training_history(ctx: ToolContext, days: int = 30, exercise_id: str = "") -> str:
-    """Get recent training records. exercise_id: filter by exercise."""
-    history = ctx.session.state.get("user:training_history", [])
-    if exercise_id:
-        filtered = []
-        for session in history:
-            matching = [e for e in session.get("exercises", []) if e["exercise_id"] == exercise_id]
-            if matching:
-                filtered.append({**session, "exercises": matching})
-        history = filtered
-    if not history:
-        return "No training history found."
-    lines = [f"Found {len(history)} sessions:"]
-    for s in history[-10:]:
-        date = s.get("date", "?")
-        for ex in s.get("exercises", []):
-            eid = ex.get("exercise_id", "?")
-            sets = ex.get("sets", [])
-            max_w = max((st.get("weight", 0) for st in sets), default=0)
-            lines.append(f"  {date}: {eid} {len(sets)} sets, max {max_w}kg")
-    return "\n".join(lines)
+# ══════════════════════════════════════════════════════════════════
+# TOOL 2: manage_training
+# ══════════════════════════════════════════════════════════════════
+
+def manage_training(ctx: ToolContext, action: str, data_json: str = "") -> str:
+    """Manage training data. action: read_history|write_set|generate_plan|modify_plan|read_plan.
+    data_json varies by action — see examples in tool router prompt."""
+
+    if action == "read_history":
+        history = ctx.session.state.get("user:training_history", [])
+        if not history or not isinstance(history, list):
+            return "No training history."
+        lines = [f"{len(history)} sessions:"]
+        for s in history[-10:]:
+            if not isinstance(s, dict):
+                continue
+            date = s.get("date", "?")
+            for ex in s.get("exercises", []):
+                eid = ex.get("exercise_id", "?")
+                sets = ex.get("sets", [])
+                max_w = max((st.get("weight", 0) for st in sets), default=0)
+                lines.append(f"  {date}: {eid} {len(sets)} sets, max {max_w}kg")
+        return "\n".join(lines)
+
+    elif action == "write_set":
+        try:
+            data = json.loads(data_json) if data_json else {}
+        except json.JSONDecodeError:
+            return f"Invalid JSON: {data_json}"
+        history = ctx.session.state.get("user:training_history", [])
+        if not isinstance(history, list):
+            history = []
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today_session = next((s for s in history if isinstance(s, dict) and s.get("date") == today), None)
+        if not today_session:
+            today_session = {"id": str(uuid.uuid4()), "date": today,
+                             "start_time": datetime.now(timezone.utc).isoformat(),
+                             "end_time": None, "exercises": []}
+            history.append(today_session)
+        eid = data.get("exercise_id", "unknown")
+        ex_record = next((e for e in today_session["exercises"] if e.get("exercise_id") == eid), None)
+        if not ex_record:
+            ex_record = {"exercise_id": eid, "sets": []}
+            today_session["exercises"].append(ex_record)
+        ex_record["sets"].append({
+            "set_number": data.get("set_number", len(ex_record["sets"]) + 1),
+            "reps": data.get("reps", 0), "weight": data.get("weight", 0),
+            "rpe": data.get("rpe"), "rom_avg_degrees": data.get("rom_avg_degrees"),
+            "symmetry_score": data.get("symmetry_score"),
+        })
+        ctx.session.state["user:training_history"] = history
+        _push_to_frontend(ctx, "user:training_history", history)
+        name = EXERCISE_LIBRARY.get(eid, {}).get("name_en", eid)
+        return f"Recorded: {name} set {data.get('set_number', '?')}, {data.get('weight', 0)}kg x {data.get('reps', 0)}"
+
+    elif action == "generate_plan":
+        return _generate_plan(ctx, data_json)
+
+    elif action == "modify_plan":
+        return _modify_plan(ctx, data_json)
+
+    elif action == "read_plan":
+        plan = ctx.session.state.get("current_plan")
+        if not plan:
+            return "No current plan."
+        _push_to_frontend(ctx, "current_plan", plan)
+        lines = [f"Plan: {', '.join(plan.get('target_parts', []))}"]
+        for ex in plan.get("exercises", []):
+            lines.append(f"  {ex.get('name_en', '?')}: {ex.get('target_sets')}x{ex.get('target_reps')} @ {ex.get('target_weight')}kg")
+        return "\n".join(lines)
+
+    return f"Unknown action: {action}"
 
 
-def record_training_set(ctx: ToolContext, exercise_id: str, set_number: int,
-                        reps: int, weight: float, rpe: float = 0,
-                        rom_avg_degrees: float = 0,
-                        symmetry_score: float = 0) -> str:
-    """Record one training set."""
-    history = ctx.session.state.get("user:training_history", [])
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    today_session = None
-    for s in history:
-        if s["date"] == today:
-            today_session = s
-            break
-    if not today_session:
-        today_session = {"id": str(uuid.uuid4()), "date": today,
-                         "start_time": datetime.now(timezone.utc).isoformat(),
-                         "end_time": None, "exercises": []}
-        history.append(today_session)
-    ex_record = None
-    for e in today_session["exercises"]:
-        if e["exercise_id"] == exercise_id:
-            ex_record = e
-            break
-    if not ex_record:
-        ex_record = {"exercise_id": exercise_id, "sets": []}
-        today_session["exercises"].append(ex_record)
-    ex_record["sets"].append({
-        "set_number": set_number, "reps": reps, "weight": weight,
-        "rpe": rpe or None, "rom_avg_degrees": rom_avg_degrees or None,
-        "symmetry_score": symmetry_score or None,
-    })
-    ctx.session.state["user:training_history"] = history
-    _push_to_frontend(ctx, "user:training_history", history)
-    ex_name = EXERCISE_LIBRARY.get(exercise_id, {}).get("name_en", exercise_id)
-    return f"Recorded: {ex_name} set {set_number}, {weight}kg x {reps}"
-
-
-def generate_training_plan(ctx: ToolContext, target_parts: str = "") -> str:
-    """Generate training plan using Gemini AI. target_parts: comma-separated like 'chest,back'. Empty = auto."""
-    import os
+def _generate_plan(ctx, data_json: str) -> str:
+    """AI-generates a training plan using Gemini."""
     from google import genai
     from google.genai import types as gtypes
 
-    print(f"[TOOL] generate_training_plan called with target_parts='{target_parts}'")
+    try:
+        data = json.loads(data_json) if data_json else {}
+    except json.JSONDecodeError:
+        data = {}
+
     profile = ctx.session.state.get("user:body_profile", DEFAULT_BODY_PROFILE)
     history = ctx.session.state.get("user:training_history", [])
-
-    # Determine target parts
-    parts = [p.strip() for p in target_parts.split(",") if p.strip()] if target_parts else []
+    target = data.get("target_parts", "")
+    parts = [p.strip() for p in target.split(",") if p.strip()] if target else []
     if not parts:
-        parts = [p for p, d in profile.items() if d.get("recovery_status") == "recovered"]
+        parts = [p for p, d in profile.items() if isinstance(d, dict) and d.get("recovery_status") == "recovered"]
         if not parts:
             parts = ["chest", "back"]
 
-    # Build context for Gemini
-    profile_summary = []
-    for part, data in profile.items():
-        if not isinstance(data, dict):
-            continue
-        ex = data.get("exercise", "unknown")
-        mw = data.get("max_weight", 0)
-        status = data.get("recovery_status", "unknown")
-        last = data.get("last_trained", "never")
-        profile_summary.append(f"{part}: exercise={ex}, PR={mw}kg, status={status}, last_trained={last}")
+    profile_lines = []
+    for p, d in profile.items():
+        if isinstance(d, dict):
+            profile_lines.append(f"{p}: {d.get('exercise','?')} PR {d.get('max_weight',0)}kg, status={d.get('recovery_status','?')}, last={d.get('last_trained','never')}")
 
-    recent_sessions = []
+    history_lines = []
     for s in (history[-5:] if isinstance(history, list) else []):
         if not isinstance(s, dict):
             continue
-        date = s.get("date", "?")
         for ex in s.get("exercises", []):
-            eid = ex.get("exercise_id", "?")
             sets = ex.get("sets", [])
-            max_w = max((st.get("weight", 0) for st in sets), default=0) if sets else 0
-            total_reps = sum(st.get("reps", 0) for st in sets) if sets else 0
-            recent_sessions.append(f"{date}: {eid} {len(sets)} sets, max {max_w}kg, {total_reps} reps")
+            mw = max((st.get("weight", 0) for st in sets), default=0)
+            history_lines.append(f"{s.get('date','?')}: {ex.get('exercise_id','?')} {len(sets)} sets, max {mw}kg")
 
-    available_exercises = []
-    for eid, info in EXERCISE_LIBRARY.items():
-        available_exercises.append(f"{eid}: {info.get('name_en', eid)}, primary={info.get('primary_muscles')}")
+    exercises_avail = [f"{eid}: {info.get('name_en', eid)} ({info.get('name', '')}), primary={info.get('primary_muscles')}"
+                       for eid, info in EXERCISE_LIBRARY.items()]
 
-    prompt = f"""Generate a training plan for today. Target muscle groups: {', '.join(parts)}.
+    prompt = f"""Generate a training plan. Target: {', '.join(parts)}.
 
-USER PROFILE:
-{chr(10).join(profile_summary)}
+PROFILE:\n{chr(10).join(profile_lines)}
 
-RECENT TRAINING HISTORY (last 5 sessions):
-{chr(10).join(recent_sessions) if recent_sessions else 'No recent history.'}
+RECENT HISTORY:\n{chr(10).join(history_lines) or 'None'}
 
-AVAILABLE EXERCISES:
-{chr(10).join(available_exercises)}
+EXERCISES:\n{chr(10).join(exercises_avail)}
 
-RULES:
-- Return ONLY a valid JSON object, no markdown, no explanation
-- Use progressive overload: working weight = 70-85% of PR
-- Vary sets (3-5) and reps (5-12) based on the goal
-- If user trained a muscle recently, use lighter weight / higher reps (deload)
-- Include 2-4 exercises total, mixing compound and isolation
-- Each exercise must use an exercise_id from AVAILABLE EXERCISES
+RULES: Return ONLY valid JSON. Progressive overload (70-85% PR). Vary sets 3-5, reps 5-12. 2-4 exercises. Use exercise_ids from EXERCISES list.
 
-JSON FORMAT (strict):
-{{
-  "target_parts": ["chest", "back"],
-  "exercises": [
-    {{
-      "exercise_id": "bench_press",
-      "name": "卧推",
-      "name_en": "Bench Press",
-      "primary_muscles": ["chest"],
-      "secondary_muscles": ["shoulders", "arms"],
-      "target_sets": 4,
-      "target_reps": 8,
-      "target_weight": 85.0,
-      "completed_sets": 0
-    }}
-  ]
-}}"""
+JSON FORMAT:
+{{"target_parts":["chest"],"exercises":[{{"exercise_id":"bench_press","name":"卧推","name_en":"Bench Press","primary_muscles":["chest"],"secondary_muscles":["shoulders","arms"],"target_sets":4,"target_reps":8,"target_weight":85,"completed_sets":0}}]}}"""
 
     try:
         client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
-        response = client.models.generate_content(
+        resp = client.models.generate_content(
             model="gemini-2.5-flash",
             contents=[gtypes.Content(role="user", parts=[gtypes.Part(text=prompt)])],
-            config=gtypes.GenerateContentConfig(
-                temperature=0.7,
-                response_mime_type="application/json",
-            ),
+            config=gtypes.GenerateContentConfig(temperature=0.7, response_mime_type="application/json"),
         )
-        plan_text = response.text.strip()
-        plan = json.loads(plan_text)
+        plan = json.loads(resp.text.strip())
     except Exception as e:
-        print(f"[TOOL] AI plan generation failed: {e}, using fallback")
-        # Fallback: deterministic plan
+        print(f"[Plan] AI failed: {e}, fallback")
         exercises = []
-        for part in parts:
-            ex_id = profile.get(part, {}).get("exercise", "bench_press") if isinstance(profile.get(part), dict) else "bench_press"
-            max_w = profile.get(part, {}).get("max_weight", 0) if isinstance(profile.get(part), dict) else 0
-            target_w = round(max_w * 0.85, 1) if max_w > 0 else 20
-            ex_info = EXERCISE_LIBRARY.get(ex_id, {})
-            exercises.append({
-                "exercise_id": ex_id, "name": ex_info.get("name", ex_id),
-                "name_en": ex_info.get("name_en", ex_id),
-                "primary_muscles": ex_info.get("primary_muscles", [part]),
-                "secondary_muscles": ex_info.get("secondary_muscles", []),
-                "target_sets": 4, "target_reps": 6,
-                "target_weight": target_w, "completed_sets": 0,
-            })
+        for p in parts:
+            d = profile.get(p, {}) if isinstance(profile.get(p), dict) else {}
+            eid = d.get("exercise", "bench_press")
+            mw = d.get("max_weight", 0)
+            tw = round(mw * 0.85, 1) if mw > 0 else 20
+            info = EXERCISE_LIBRARY.get(eid, {})
+            exercises.append({"exercise_id": eid, "name": info.get("name", eid), "name_en": info.get("name_en", eid),
+                              "primary_muscles": info.get("primary_muscles", [p]), "secondary_muscles": info.get("secondary_muscles", []),
+                              "target_sets": 4, "target_reps": 6, "target_weight": tw, "completed_sets": 0})
         plan = {"target_parts": parts, "exercises": exercises}
 
     ctx.session.state["current_plan"] = plan
     _push_to_frontend(ctx, "current_plan", plan)
-
-    # Return human-readable summary for voice model
-    lines = [f"Plan for: {', '.join(plan.get('target_parts', parts))}"]
+    lines = [f"Plan: {', '.join(plan.get('target_parts', parts))}"]
     for ex in plan.get("exercises", []):
-        name = ex.get("name_en", ex.get("name", "?"))
-        lines.append(f"  {name}: {ex.get('target_sets',4)}x{ex.get('target_reps',6)} @ {ex.get('target_weight',0)}kg")
+        lines.append(f"  {ex.get('name_en','?')}: {ex.get('target_sets',4)}x{ex.get('target_reps',6)} @ {ex.get('target_weight',0)}kg")
     return "\n".join(lines)
 
 
-def trigger_safety_alert(ctx: ToolContext, alert_type: str, countdown_seconds: int = 10) -> str:
-    """Trigger safety alert. alert_type: barbell_stall|body_collapse|unresponsive"""
-    ctx.session.state["safety_alert_active"] = True
-    ctx.session.state["safety_countdown"] = countdown_seconds
-    prefs = ctx.session.state.get("user:preferences", DEFAULT_PREFERENCES)
-    contact = prefs.get("emergency_contact", "")
-    _push_to_frontend(ctx, "ui_command", {
-        "command": "show_safety_alert",
-        "data": {"countdown_seconds": countdown_seconds},
-    })
-    if not contact:
-        return f"SAFETY ALERT ({alert_type}), {countdown_seconds}s countdown. No emergency contact set!"
-    return f"SAFETY ALERT ({alert_type}), calling {contact} in {countdown_seconds}s"
+def _modify_plan(ctx, data_json: str) -> str:
+    """AI-modifies the current plan based on user request."""
+    from google import genai
+    from google.genai import types as gtypes
+
+    plan = ctx.session.state.get("current_plan")
+    if not plan:
+        return "No current plan to modify. Generate one first."
+
+    try:
+        data = json.loads(data_json) if data_json else {}
+    except json.JSONDecodeError:
+        data = {"modification": data_json}
+
+    modification = data.get("modification", "")
+    if not modification:
+        return "No modification specified."
+
+    prompt = f"""Modify this training plan based on the user's request.
+
+CURRENT PLAN:
+{json.dumps(plan, ensure_ascii=False, indent=2)}
+
+USER REQUEST: {modification}
+
+RULES: Return the COMPLETE modified plan as valid JSON. Same structure as input. Only change what the user asked for. Keep everything else the same."""
+
+    try:
+        client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+        resp = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[gtypes.Content(role="user", parts=[gtypes.Part(text=prompt)])],
+            config=gtypes.GenerateContentConfig(temperature=0.2, response_mime_type="application/json"),
+        )
+        new_plan = json.loads(resp.text.strip())
+    except Exception as e:
+        return f"Failed to modify plan: {e}"
+
+    ctx.session.state["current_plan"] = new_plan
+    _push_to_frontend(ctx, "current_plan", new_plan)
+    lines = [f"Modified plan: {', '.join(new_plan.get('target_parts', []))}"]
+    for ex in new_plan.get("exercises", []):
+        lines.append(f"  {ex.get('name_en','?')}: {ex.get('target_sets',4)}x{ex.get('target_reps',6)} @ {ex.get('target_weight',0)}kg")
+    return "\n".join(lines)
 
 
-def cancel_safety_alert(ctx: ToolContext) -> str:
-    """Cancel active safety alert."""
-    ctx.session.state["safety_alert_active"] = False
-    _push_to_frontend(ctx, "ui_command", {"command": "cancel_safety_alert", "data": {}})
-    return "Safety alert cancelled."
+# ══════════════════════════════════════════════════════════════════
+# TOOL 3: manage_preferences
+# ══════════════════════════════════════════════════════════════════
 
-
-def get_user_preferences(ctx: ToolContext) -> str:
-    """Get user preferences."""
-    prefs = ctx.session.state.get("user:preferences", DEFAULT_PREFERENCES)
-    return f"personality={prefs.get('personality_mode')}, voice={prefs.get('voice_name')}, contact={prefs.get('emergency_contact','none')}, rest={prefs.get('rest_timer_seconds',120)}s"
-
-
-def update_user_preferences(ctx: ToolContext, personality_mode: str = "",
-                            language: str = "", emergency_contact: str = "",
-                            rest_timer_seconds: int = 0,
-                            safety_sensitivity: str = "") -> str:
-    """Update preferences. personality_mode: professional|gentle|trash_talk"""
+def manage_preferences(ctx: ToolContext, action: str, data_json: str = "") -> str:
+    """Manage user preferences. action: read|write.
+    For write: data_json like '{"personality_mode":"gentle"}' or '{"rest_timer_seconds":90}'."""
     prefs = ctx.session.state.get("user:preferences", DEFAULT_PREFERENCES.copy())
-    updated = []
-    if personality_mode:
-        prefs["personality_mode"] = personality_mode
-        prefs["voice_name"] = VOICE_MAP.get(personality_mode, "Charon")
-        updated.append(f"personality={personality_mode}")
-    if language:
-        prefs["language"] = language
-        updated.append(f"language={language}")
-    if emergency_contact:
-        prefs["emergency_contact"] = emergency_contact
-        updated.append("emergency_contact")
-    if rest_timer_seconds > 0:
-        prefs["rest_timer_seconds"] = rest_timer_seconds
-        updated.append(f"rest={rest_timer_seconds}s")
-    if safety_sensitivity:
-        prefs["safety_sensitivity"] = safety_sensitivity
-        updated.append(f"safety={safety_sensitivity}")
-    ctx.session.state["user:preferences"] = prefs
-    _push_to_frontend(ctx, "user:preferences", prefs)
-    return f"Updated: {', '.join(updated)}" if updated else "No changes."
 
+    if action == "read":
+        return f"personality={prefs.get('personality_mode')}, voice={prefs.get('voice_name')}, contact={prefs.get('emergency_contact','none')}, rest={prefs.get('rest_timer_seconds',120)}s"
 
-def get_exercise_info(ctx: ToolContext, exercise_id: str) -> str:
-    """Get exercise definition."""
-    info = EXERCISE_LIBRARY.get(exercise_id, None)
-    if not info:
-        return f"Unknown exercise: {exercise_id}"
-    return f"{info.get('name_en', exercise_id)}: joints={info.get('tracked_joints')}, primary={info.get('primary_muscles')}"
-
-
-def analyze_posture(ctx: ToolContext, shoulder_tilt_degrees: float = 0,
-                    pelvis_tilt_degrees: float = 0, spine_curvature: str = "",
-                    head_forward_cm: float = 0, notes: str = "") -> str:
-    """Analyze user posture and generate report."""
-    issues = []
-    if abs(shoulder_tilt_degrees) > 3:
-        side = "right" if shoulder_tilt_degrees > 0 else "left"
-        issues.append(f"{side} shoulder elevated {abs(shoulder_tilt_degrees):.1f}°")
-    if pelvis_tilt_degrees > 15:
-        issues.append(f"anterior pelvic tilt {pelvis_tilt_degrees:.1f}°")
-    if head_forward_cm > 3:
-        issues.append(f"forward head {head_forward_cm:.1f}cm")
-    if spine_curvature:
-        issues.append(f"spinal curvature: {spine_curvature}")
-    severity = "good" if not issues else ("needs attention" if len(issues) <= 2 else "consult specialist")
-    report = {"issues": issues, "issue_count": len(issues), "overall": severity}
-    if notes:
-        report["notes"] = notes
-    ctx.session.state["user:posture_report"] = report
-    _push_to_frontend(ctx, "user:posture_report", report)
-    if not issues:
-        return "Posture: Good. No issues."
-    return f"Posture: {severity}. {'; '.join(issues)}"
-
-
-def send_ui_command(ctx: ToolContext, command: str, data_json: str = "") -> str:
-    """Send UI command to frontend. command: switch_mode|start_rest_timer|show_safety_alert"""
-    parsed_data = {}
-    if data_json:
+    elif action == "write":
         try:
-            parsed_data = json.loads(data_json)
+            data = json.loads(data_json) if data_json else {}
         except json.JSONDecodeError:
             return f"Invalid JSON: {data_json}"
-    _push_to_frontend(ctx, "ui_command", {"command": command, "data": parsed_data})
-    return f"UI command sent: {command}"
+        updated = []
+        if "personality_mode" in data:
+            prefs["personality_mode"] = data["personality_mode"]
+            prefs["voice_name"] = VOICE_MAP.get(data["personality_mode"], "Charon")
+            updated.append(f"personality={data['personality_mode']}")
+        if "emergency_contact" in data:
+            prefs["emergency_contact"] = data["emergency_contact"]
+            updated.append("emergency_contact")
+        if "rest_timer_seconds" in data:
+            prefs["rest_timer_seconds"] = data["rest_timer_seconds"]
+            updated.append(f"rest={data['rest_timer_seconds']}s")
+        if "language" in data:
+            prefs["language"] = data["language"]
+            updated.append(f"language={data['language']}")
+        if "safety_sensitivity" in data:
+            prefs["safety_sensitivity"] = data["safety_sensitivity"]
+            updated.append(f"safety={data['safety_sensitivity']}")
+        ctx.session.state["user:preferences"] = prefs
+        _push_to_frontend(ctx, "user:preferences", prefs)
+        return f"Updated: {', '.join(updated)}" if updated else "No changes."
+
+    return f"Unknown action: {action}"
+
+
+# ══════════════════════════════════════════════════════════════════
+# TOOL 4: safety_control
+# ══════════════════════════════════════════════════════════════════
+
+def safety_control(ctx: ToolContext, action: str, data_json: str = "") -> str:
+    """Safety alert control. action: trigger|cancel.
+    For trigger: data_json like '{"alert_type":"barbell_stall","countdown_seconds":10}'."""
+    if action == "trigger":
+        try:
+            data = json.loads(data_json) if data_json else {}
+        except json.JSONDecodeError:
+            data = {}
+        alert_type = data.get("alert_type", "unknown")
+        countdown = data.get("countdown_seconds", 10)
+        ctx.session.state["safety_alert_active"] = True
+        ctx.session.state["safety_countdown"] = countdown
+        _push_to_frontend(ctx, "ui_command", {
+            "command": "show_safety_alert",
+            "data": {"countdown_seconds": countdown},
+        })
+        contact = ctx.session.state.get("user:preferences", {}).get("emergency_contact", "")
+        if not contact:
+            return f"SAFETY ALERT ({alert_type}), {countdown}s. No emergency contact!"
+        return f"SAFETY ALERT ({alert_type}), calling {contact} in {countdown}s"
+
+    elif action == "cancel":
+        ctx.session.state["safety_alert_active"] = False
+        _push_to_frontend(ctx, "ui_command", {"command": "cancel_safety_alert", "data": {}})
+        return "Safety alert cancelled."
+
+    return f"Unknown action: {action}"
+
+
+# ══════════════════════════════════════════════════════════════════
+# TOOL 5: ui_navigate
+# ══════════════════════════════════════════════════════════════════
+
+def ui_navigate(ctx: ToolContext, command: str, data_json: str = "") -> str:
+    """Control frontend UI. command: switch_mode|start_rest_timer.
+    data_json: '{"mode":"planning"}' or '{"seconds":120}'."""
+    try:
+        data = json.loads(data_json) if data_json else {}
+    except json.JSONDecodeError:
+        return f"Invalid JSON: {data_json}"
+    _push_to_frontend(ctx, "ui_command", {"command": command, "data": data})
+    return f"UI: {command}"
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -394,49 +396,40 @@ ALWAYS speak English. Never Chinese, German, or other languages.
 
 ## Tool Results
 A separate system handles tool calling automatically. You will receive messages tagged [TOOL_RESULT] with the actual data.
-When you see [TOOL_RESULT], describe the result naturally to the user using the EXACT numbers from the result. Do NOT invent or change any numbers.
-Example: if [TOOL_RESULT] says "bench press 93kg", say "93 kilos" — not 90, not 100, exactly 93.
+When you see [TOOL_RESULT], describe the result naturally using the EXACT numbers. Never invent data.
 
 ## Personality Modes
 
 ### trash_talk (DEFAULT — star of the show!)
 Gym bro who roasts but gives great advice. Comedy through contrast.
 - Arrival: "Oh look who decided to show up!"
-- Rep count: "One! Two! Three! Wow you came prepared?"
 - Bad ROM: "Nah that doesn't count! My grandma extends further reaching for the remote."
 - Final reps: "Yeah buddy! Light weight baby! COME ON!"
 - Too much rest: "Are you resting or on vacation?"
-- Set done: "That's it? Fine, pass. Add weight next set."
 - Safety: IMMEDIATELY serious: "HOLD UP! Are you okay?!"
-- After safety cancel: "Don't scare me like that — who am I gonna train with?"
 RULE: Every roast MUST be followed by actual coaching.
 
 ### gentle
 Warm, encouraging. "Great form! Just extend a tiny bit more..."
 
 ### professional
-Clinical. "Set 3 complete. Rest 120 seconds. Volume on track."
+Clinical. "Set 3 complete. Rest 120 seconds."
 
 ## CV Event Rules
 [CV] rep_complete → count it, roast if ROM bad
 [CV] form_issue → correct immediately
-[CV] safety_alert → SERIOUS mode, call trigger_safety_alert
+[CV] safety_alert → SERIOUS mode
 [CV] gesture thumbs_up → treat as "yes/confirm"
-[CV] set_complete → call record_training_set, then start rest timer
 
 ## Core Rules
-- Reference REAL data from tools, never invent numbers
-- Safety is ALWAYS #1 — override personality for emergencies
-- Keep voice SHORT and punchy, like a real coach
-- ALWAYS call tools when the user asks you to do something. No exceptions.
+- Reference REAL data, never invent numbers
+- Safety is ALWAYS #1
+- Keep voice SHORT and punchy
 """
 
 root_agent = Agent(
     name="muscleclaw",
     model=LIVE_MODEL,
     instruction=SYSTEM_INSTRUCTION,
-    # No tools — all tool calling handled by ToolRouter (text model).
-    # Audio model only does voice conversation and reacts to [TOOL_RESULT].
-    # This prevents inconsistency between voice and UI data.
-    tools=[],
+    tools=[],  # All tools handled by ToolRouter
 )

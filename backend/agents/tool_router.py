@@ -1,140 +1,107 @@
-"""ToolRouter — Text model for reliable tool calling.
+"""ToolRouter — Text model for reliable tool calling (6 domain tools).
 
-Native audio model (preview) has ~50% tool calling reliability.
-This module uses gemini-2.5-flash (text, stable) to analyze user
-messages, decide which tools to call, and execute them directly.
-
-The audio model handles voice I/O and personality only.
+Uses gemini-2.5-flash with mode=ANY for 100% tool call reliability.
+Audio model handles voice only. This handles all data operations.
 """
-import json
 import os
 from google import genai
 from google.genai import types
 
-# Tool declarations for the text model (matching main_agent.py tools)
 TOOL_DECLARATIONS = [
     types.FunctionDeclaration(
-        name="get_body_profile",
-        description="Get user's 6 muscle group strength data and recovery status.",
-        parameters=types.Schema(type="OBJECT", properties={}),
-    ),
-    types.FunctionDeclaration(
-        name="update_body_profile",
-        description="Update a muscle group's data.",
+        name="manage_profile",
+        description="Read or write body profile data (6 muscle groups: chest, shoulders, back, legs, core, arms). Use 'read' to check recovery status, 'write' to update PR weights or training dates.",
         parameters=types.Schema(
             type="OBJECT",
             properties={
-                "part": types.Schema(type="STRING", description="chest|shoulders|back|legs|core|arms"),
-                "max_weight": types.Schema(type="NUMBER", description="New max weight in kg"),
-                "last_trained": types.Schema(type="STRING", description="Date like 2026-03-17"),
+                "action": types.Schema(type="STRING", description="read or write"),
+                "part": types.Schema(type="STRING", description="all, chest, shoulders, back, legs, core, or arms"),
+                "data_json": types.Schema(type="STRING", description='JSON for write, e.g. {"max_weight":120,"last_trained":"2026-03-17"}'),
             },
-            required=["part"],
+            required=["action"],
         ),
     ),
     types.FunctionDeclaration(
-        name="generate_training_plan",
-        description="Generate a training plan. target_parts: comma-separated like 'chest,back'. Empty = auto.",
+        name="manage_training",
+        description="Manage training plans and history. Actions: read_history (view past sessions), write_set (record a set), generate_plan (AI creates new plan), modify_plan (change existing plan), read_plan (view current plan).",
         parameters=types.Schema(
             type="OBJECT",
             properties={
-                "target_parts": types.Schema(type="STRING", description="Comma-separated muscle groups"),
+                "action": types.Schema(type="STRING", description="read_history, write_set, generate_plan, modify_plan, or read_plan"),
+                "data_json": types.Schema(type="STRING", description='JSON varies by action. generate_plan: {"target_parts":"chest,back"}. write_set: {"exercise_id":"bench_press","set_number":1,"reps":8,"weight":100}. modify_plan: {"modification":"change bench press weight to 90kg"}.'),
             },
+            required=["action"],
         ),
     ),
     types.FunctionDeclaration(
-        name="record_training_set",
-        description="Record one training set.",
+        name="manage_preferences",
+        description="Read or write user preferences (personality mode, rest timer, emergency contact).",
         parameters=types.Schema(
             type="OBJECT",
             properties={
-                "exercise_id": types.Schema(type="STRING"),
-                "set_number": types.Schema(type="INTEGER"),
-                "reps": types.Schema(type="INTEGER"),
-                "weight": types.Schema(type="NUMBER"),
-                "rpe": types.Schema(type="NUMBER"),
+                "action": types.Schema(type="STRING", description="read or write"),
+                "data_json": types.Schema(type="STRING", description='JSON for write, e.g. {"personality_mode":"gentle"} or {"rest_timer_seconds":90} or {"emergency_contact":"999"}'),
             },
-            required=["exercise_id", "set_number", "reps", "weight"],
+            required=["action"],
         ),
     ),
     types.FunctionDeclaration(
-        name="update_user_preferences",
-        description="Update user preferences. personality_mode: professional|gentle|trash_talk",
+        name="safety_control",
+        description="Trigger or cancel safety alert. Use for barbell stall, body collapse, or unresponsive user.",
         parameters=types.Schema(
             type="OBJECT",
             properties={
-                "personality_mode": types.Schema(type="STRING"),
-                "emergency_contact": types.Schema(type="STRING"),
-                "rest_timer_seconds": types.Schema(type="INTEGER"),
+                "action": types.Schema(type="STRING", description="trigger or cancel"),
+                "data_json": types.Schema(type="STRING", description='For trigger: {"alert_type":"barbell_stall","countdown_seconds":10}'),
             },
+            required=["action"],
         ),
     ),
     types.FunctionDeclaration(
-        name="trigger_safety_alert",
-        description="Trigger safety alert.",
+        name="ui_navigate",
+        description="Control frontend UI. Switch pages or start timers.",
         parameters=types.Schema(
             type="OBJECT",
             properties={
-                "alert_type": types.Schema(type="STRING", description="barbell_stall|body_collapse|unresponsive"),
-                "countdown_seconds": types.Schema(type="INTEGER"),
-            },
-            required=["alert_type"],
-        ),
-    ),
-    types.FunctionDeclaration(
-        name="cancel_safety_alert",
-        description="Cancel active safety alert.",
-        parameters=types.Schema(type="OBJECT", properties={}),
-    ),
-    types.FunctionDeclaration(
-        name="send_ui_command",
-        description="Send UI command. command: switch_mode|start_rest_timer",
-        parameters=types.Schema(
-            type="OBJECT",
-            properties={
-                "command": types.Schema(type="STRING"),
-                "data_json": types.Schema(type="STRING", description="JSON payload"),
+                "command": types.Schema(type="STRING", description="switch_mode or start_rest_timer"),
+                "data_json": types.Schema(type="STRING", description='{"mode":"dashboard"} or {"mode":"planning"} or {"seconds":120}'),
             },
             required=["command"],
         ),
     ),
     types.FunctionDeclaration(
-        name="no_tool_needed",
-        description="No tool call needed — this is just casual conversation, greeting, or a question.",
+        name="no_action",
+        description="No tool needed — casual conversation, greeting, or question that doesn't require data changes.",
         parameters=types.Schema(type="OBJECT", properties={}),
     ),
 ]
 
-ROUTER_PROMPT = """You are a tool-calling router for a fitness AI coach.
+ROUTER_PROMPT = """You are a tool router for a fitness AI coach. Given a user message, call exactly ONE tool.
 
-Given a user message, decide which tool to call. You MUST call exactly ONE tool.
-If the message is just casual chat (hello, thanks, etc.), call no_tool_needed.
+ROUTING RULES:
+- "show/check my profile/body/status/recovery" → manage_profile(action="read")
+- "update chest/weight to X" → manage_profile(action="write", part="chest", data_json='{"max_weight":X}')
+- "create/make/generate a plan" → manage_training(action="generate_plan", data_json='{"target_parts":"chest,back"}')
+- "change/modify plan: bench to 90kg" → manage_training(action="modify_plan", data_json='{"modification":"change bench press weight to 90kg"}')
+- "show/read my plan" → manage_training(action="read_plan")
+- "record set: bench 100kg 8 reps" → manage_training(action="write_set", data_json='{"exercise_id":"bench_press","set_number":1,"reps":8,"weight":100}')
+- "show training history" → manage_training(action="read_history")
+- "switch to gentle/trash talk/pro" → manage_preferences(action="write", data_json='{"personality_mode":"gentle"}')
+- "set rest timer to 90s" → manage_preferences(action="write", data_json='{"rest_timer_seconds":90}')
+- "show dashboard/plan/training" → ui_navigate(command="switch_mode", data_json='{"mode":"dashboard"}')
+- "trigger/cancel safety alert" → safety_control(action="trigger/cancel")
+- Greetings, chat, questions → no_action()
 
-Rules:
-- "create/make a plan" or "what should I train" → generate_training_plan
-- "update my chest/weight" or any body part data update → update_body_profile
-- "record this set / I did X reps" → record_training_set
-- "switch to gentle/trash talk/pro" → update_user_preferences
-- "show dashboard / switch mode" → send_ui_command
-- "show my profile" → get_body_profile
-- "trigger/cancel safety" → trigger_safety_alert or cancel_safety_alert
-- Greetings, questions, chat → no_tool_needed
-
-Always call the tool. Never just respond with text."""
+IMPORTANT: For modify_plan, put the user's exact modification request in data_json.modification field.
+Always call a tool. Never respond with text only."""
 
 
 class ToolRouter:
-    """Routes user messages to tool calls via text model."""
-
     def __init__(self):
         self._client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
     async def route(self, user_text: str) -> tuple[str | None, dict | None]:
-        """Analyze user text and return (tool_name, tool_args) or (None, None).
-
-        Returns:
-            (tool_name, args_dict) if a tool should be called
-            (None, None) if no tool needed (casual chat)
-        """
+        """Return (tool_name, args_dict) or (None, None) for no_action."""
         try:
             response = self._client.models.generate_content(
                 model="gemini-2.5-flash",
@@ -143,27 +110,21 @@ class ToolRouter:
                     system_instruction=ROUTER_PROMPT,
                     tools=[types.Tool(function_declarations=TOOL_DECLARATIONS)],
                     tool_config=types.ToolConfig(
-                        function_calling_config=types.FunctionCallingConfig(
-                            mode="ANY",  # Force function calling
-                        ),
+                        function_calling_config=types.FunctionCallingConfig(mode="ANY"),
                     ),
-                    temperature=0.0,  # Deterministic
+                    temperature=0.0,
                 ),
             )
-
-            # Extract function call
             if response.candidates and response.candidates[0].content:
                 for part in response.candidates[0].content.parts:
                     if part.function_call:
                         name = part.function_call.name
                         args = dict(part.function_call.args) if part.function_call.args else {}
-                        if name == "no_tool_needed":
+                        if name == "no_action":
                             return None, None
-                        print(f"[Router] {user_text[:40]}... → {name}({args})")
+                        print(f"[Router] {user_text[:50]}... → {name}({args})")
                         return name, args
-
             return None, None
-
         except Exception as e:
             print(f"[Router] Error: {e}")
             return None, None
