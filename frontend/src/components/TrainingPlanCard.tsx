@@ -79,10 +79,7 @@ export function TrainingPlanCard({
         }} />
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
-            {exercise.name}
-            <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 500, marginLeft: 6 }}>
-              {exercise.name_en}
-            </span>
+            {exercise.name_en || exercise.name}
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 1 }}>
             {allMuscles.join(' · ')}
