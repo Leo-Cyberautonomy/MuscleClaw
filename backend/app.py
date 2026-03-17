@@ -261,10 +261,10 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                 "role": "user",
                                 "text": user_text,
                             })
-                            # Route through ToolRouter for reliable tool calling
-                            asyncio.create_task(
-                                _route_and_execute(user_text, session, websocket)
-                            )
+                            # ToolRouter disabled for A/B test — audio model calls tools directly
+                            # asyncio.create_task(
+                            #     _route_and_execute(user_text, session, websocket)
+                            # )
 
                     # Data layer: push state changes to frontend
                     if event.actions:
@@ -355,13 +355,13 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                 elif msg["type"] == "text":
                     user_text = msg["text"]
 
-                    # Dual model: text model routes tool calls (reliable),
-                    # audio model handles voice response (personality).
-                    asyncio.create_task(
-                        _route_and_execute(user_text, session, websocket)
-                    )
+                    # Single model: audio model calls tools via ADK.
+                    # ToolRouter disabled for A/B test.
+                    # asyncio.create_task(
+                    #     _route_and_execute(user_text, session, websocket)
+                    # )
 
-                    # Also send to Live API for voice response
+                    # Send to Live API — audio model has tools, will call them
                     live_queue.send_content(types.Content(
                         role="user",
                         parts=[types.Part(text=user_text)],
