@@ -225,18 +225,58 @@ def _generate_plan(ctx, data_json: str) -> str:
     exercises_avail = [f"{eid}: {info.get('name_en', eid)} ({info.get('name', '')}), primary={info.get('primary_muscles')}"
                        for eid, info in EXERCISE_LIBRARY.items()]
 
-    prompt = f"""Generate a training plan. Target: {', '.join(parts)}.
+    prompt = f"""You are an expert strength coach. Generate a training plan for today.
 
-PROFILE:\n{chr(10).join(profile_lines)}
+TARGET MUSCLE GROUPS: {', '.join(parts)}
 
-RECENT HISTORY:\n{chr(10).join(history_lines) or 'None'}
+USER DATA:
+{chr(10).join(profile_lines)}
 
-EXERCISES:\n{chr(10).join(exercises_avail)}
+RECENT TRAINING (last 5 sessions):
+{chr(10).join(history_lines) or 'No history — this is a beginner. Start conservative.'}
 
-RULES: Return ONLY valid JSON. Progressive overload (70-85% PR). Vary sets 3-5, reps 5-12. 2-4 exercises. Use exercise_ids from EXERCISES list.
+AVAILABLE EXERCISES:
+{chr(10).join(exercises_avail)}
+
+TRAINING SCIENCE PRINCIPLES (apply these):
+
+1. EXERCISE SELECTION
+   - Start with compound movements (bench_press, squat, deadlift, barbell_row, ohp)
+   - Finish with isolation (barbell_curl, plank)
+   - 2-4 exercises per session. More is not better.
+   - Choose exercises that match the target muscles
+
+2. PROGRESSIVE OVERLOAD
+   - Working weight = 75-85% of PR for strength (3-6 reps)
+   - Working weight = 65-75% of PR for hypertrophy (8-12 reps)
+   - If user hit a PR recently, back off 10% for a deload session
+   - If no PR data (0kg), prescribe moderate weight based on exercise type
+
+3. VOLUME
+   - 3-4 working sets per exercise (not counting warm-up)
+   - Total session: 12-20 working sets
+   - Don't exceed 20 sets — diminishing returns
+
+4. RECOVERY AWARENESS
+   - If a muscle was trained yesterday → skip it or use very light weight
+   - If "recovering" status → reduce volume (2-3 sets instead of 4)
+   - If "recovered" → full volume
+
+5. REP RANGES (match to goal)
+   - Strength: 3-6 reps, heavier weight, longer rest
+   - Hypertrophy: 8-12 reps, moderate weight
+   - Endurance/pump: 12-15 reps, lighter weight
+   - Mix rep ranges across exercises for variety
+
+6. VARIETY
+   - Don't repeat the exact same plan as recent sessions
+   - Vary rep ranges, exercise order, or working weight
+   - If user did 4x6 last time, try 3x10 or 5x5 this time
+
+Return ONLY valid JSON. No markdown, no explanation.
 
 JSON FORMAT:
-{{"target_parts":["chest"],"exercises":[{{"exercise_id":"bench_press","name":"卧推","name_en":"Bench Press","primary_muscles":["chest"],"secondary_muscles":["shoulders","arms"],"target_sets":4,"target_reps":8,"target_weight":85,"completed_sets":0}}]}}"""
+{{"target_parts":["chest","back"],"exercises":[{{"exercise_id":"bench_press","name":"卧推","name_en":"Bench Press","primary_muscles":["chest"],"secondary_muscles":["shoulders","arms"],"target_sets":4,"target_reps":8,"target_weight":85.0,"completed_sets":0}}]}}"""
 
     try:
         client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
