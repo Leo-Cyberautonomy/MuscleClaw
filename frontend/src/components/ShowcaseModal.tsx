@@ -1,11 +1,10 @@
 /**
  * ShowcaseModal — Full-screen display of AI-enhanced muscular photo.
- * Only shows the generated image, not before/after comparison.
  */
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 interface ShowcaseModalProps {
-  imageSrc: string;  // data:image/jpeg;base64,...
+  imageSrc: string;
   onClose: () => void;
 }
 
@@ -46,14 +45,40 @@ export function ShowcaseModal({ imageSrc, onClose }: ShowcaseModalProps) {
 
 
 /**
- * ShowcaseCapture — Capture button + loading + result display.
+ * ShowcaseCapture — Auto-captures after 5s countdown, or manual button.
+ * When entering showcase mode, starts countdown automatically.
  */
 export function ShowcaseCapture({ videoRef }: { videoRef: React.RefObject<HTMLVideoElement | null> }) {
   const [loading, setLoading] = useState(false);
   const [resultSrc, setResultSrc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState(5);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const capturedRef = useRef(false);
 
-  const capture = async () => {
+  // Auto-countdown on mount
+  useEffect(() => {
+    capturedRef.current = false;
+    setCountdown(5);
+    countdownRef.current = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          if (countdownRef.current) clearInterval(countdownRef.current);
+          if (!capturedRef.current) {
+            capturedRef.current = true;
+            doCapture();
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => {
+      if (countdownRef.current) clearInterval(countdownRef.current);
+    };
+  }, []);
+
+  const doCapture = async () => {
     const video = videoRef.current;
     if (!video) return;
 
@@ -90,26 +115,54 @@ export function ShowcaseCapture({ videoRef }: { videoRef: React.RefObject<HTMLVi
 
   return (
     <>
-      <button
-        onClick={capture}
-        disabled={loading}
-        style={{
-          width: '100%', padding: 14, border: 'none',
-          borderRadius: 14,
-          background: loading ? 'rgba(255,255,255,0.1)' : 'linear-gradient(135deg, #5E5CE6, #BF5AF2)',
-          color: '#fff', fontSize: 15, fontWeight: 700,
-          cursor: loading ? 'wait' : 'pointer',
-          fontFamily: "'Inter', sans-serif",
-          boxShadow: loading ? 'none' : '0 4px 16px rgba(94,92,230,.3)',
-          transition: 'all .25s cubic-bezier(.34,1.56,.64,1)',
-        }}
-      >
-        {loading ? 'Enhancing...' : 'Capture & Enhance'}
-      </button>
+      {/* Countdown or status */}
+      {!loading && !resultSrc && countdown > 0 && (
+        <div style={{
+          textAlign: 'center', marginBottom: 12,
+          fontFamily: 'var(--font-mono)', fontSize: 48, fontWeight: 800,
+          color: 'var(--brand-purple)',
+          animation: 'scaleIn 0.3s var(--spring) both',
+        }}>
+          {countdown}
+        </div>
+      )}
+
+      {loading && (
+        <div style={{
+          textAlign: 'center', padding: 20,
+          fontSize: 14, color: 'var(--text-secondary)',
+        }}>
+          Enhancing your muscles...
+        </div>
+      )}
+
+      {/* Manual capture button (if countdown finished but capture failed, or user wants to retry) */}
+      {!loading && !resultSrc && countdown === 0 && (
+        <button
+          onClick={doCapture}
+          style={{
+            width: '100%', padding: 14, border: 'none',
+            borderRadius: 14,
+            background: 'linear-gradient(135deg, #5E5CE6, #BF5AF2)',
+            color: '#fff', fontSize: 15, fontWeight: 700,
+            cursor: 'pointer', fontFamily: "'Inter', sans-serif",
+            boxShadow: '0 4px 16px rgba(94,92,230,.3)',
+          }}
+        >
+          Retry Capture
+        </button>
+      )}
 
       {error && (
         <div style={{ fontSize: 12, color: '#FF3B30', marginTop: 8, textAlign: 'center' }}>
           {error}
+          <button onClick={doCapture} style={{
+            display: 'block', margin: '8px auto 0', padding: '8px 16px',
+            border: 'none', borderRadius: 8, background: 'var(--bg-subtle)',
+            color: 'var(--text-primary)', fontSize: 12, cursor: 'pointer',
+          }}>
+            Try Again
+          </button>
         </div>
       )}
 
