@@ -192,6 +192,18 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
         response_modalities=["AUDIO"],
         input_audio_transcription=types.AudioTranscriptionConfig(),
         output_audio_transcription=types.AudioTranscriptionConfig(),
+        # VAD tuning: reduce false interruptions from background noise
+        # LOW start sensitivity = don't trigger on quiet sounds
+        # LOW end sensitivity = wait longer before deciding user stopped
+        # 1000ms silence = user must pause 1s before AI considers turn over
+        realtime_input_config=types.RealtimeInputConfig(
+            automatic_activity_detection=types.AutomaticActivityDetection(
+                start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_LOW,
+                end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_LOW,
+                silence_duration_ms=1000,
+            ),
+            activity_handling=types.ActivityHandling.START_OF_ACTIVITY_INTERRUPTS,
+        ),
     )
 
     await websocket.send_json({
