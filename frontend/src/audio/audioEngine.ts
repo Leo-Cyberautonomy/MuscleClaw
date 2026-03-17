@@ -60,6 +60,11 @@ export class AudioEngine {
     if (!this.playCtx) {
       this.playCtx = new AudioContext({ sampleRate: 24000 });
     }
+    // Chrome autoplay policy: AudioContext starts suspended until user interaction.
+    // Resume it on every playPCM call to ensure audio plays.
+    if (this.playCtx.state === 'suspended') {
+      this.playCtx.resume().catch(() => {});
+    }
 
     const int16 = new Int16Array(pcm);
     const float32 = new Float32Array(int16.length);
